@@ -1,17 +1,30 @@
 import Phaser from 'phaser';
 import { TILE_SIZE, BG_TILE_SIZE } from '../constants';
 import { LevelData } from '../levels/LevelSchema';
-import { Player } from '../entities/Player';
 import { InputManager } from '../input/InputManager';
-import { CameraSystem } from '../systems/CameraSystem';
 import { AudioManager } from '../audio/AudioManager';
 
+// ECS Architecture
+import { EntityManager, Entity } from '../ecs/Entity';
+import { PhysicsBodyComponent, RenderComponent } from '../ecs/components';
+import { createPlayerEntity } from '../entities/PlayerFactory';
+import { MovementSystem } from '../ecs/systems/MovementSystem';
+import { PhysicsSystem } from '../ecs/systems/PhysicsSystem';
+import { RenderSystem } from '../ecs/systems/RenderSystem';
+import { CameraSystem } from '../ecs/systems/CameraSystem';
+
 export class GameScene extends Phaser.Scene {
-    private player1!: Player;  // Human
-    private player2!: Player;  // Dog
+    private entityManager!: EntityManager;
+    private player1Entity!: Entity;
+    private player2Entity!: Entity;
     private inputManager!: InputManager;
-    private cameraSystem!: CameraSystem;
     private audioManager!: AudioManager;
+
+    // ECS Systems
+    private movementSystem!: MovementSystem;
+    private physicsSystem!: PhysicsSystem;
+    private renderSystem!: RenderSystem;
+    private cameraSystem!: CameraSystem;
 
     // FPS display
     private fpsText!: Phaser.GameObjects.Text;
@@ -83,6 +96,9 @@ export class GameScene extends Phaser.Scene {
         // 6. Set world bounds
         this.physics.world.setBounds(0, 0, levelWidthPx, levelHeightPx);
 
+        // Initialize ECS Entity Manager
+        this.entityManager = new EntityManager();
+
         // 7. Create players from spawn points
         let humanSpawn = { x: 3, y: 10 };
         let dogSpawn = { x: 20, y: 10 };
@@ -95,28 +111,35 @@ export class GameScene extends Phaser.Scene {
             }
         }
 
-        this.player1 = new Player(
+        this.player1Entity = createPlayerEntity(
             this,
             humanSpawn.x * TILE_SIZE + TILE_SIZE / 2,
             humanSpawn.y * TILE_SIZE,
             'human', 0,
+            this.entityManager,
         );
 
-        this.player2 = new Player(
+        this.player2Entity = createPlayerEntity(
             this,
             dogSpawn.x * TILE_SIZE + TILE_SIZE / 2,
             dogSpawn.y * TILE_SIZE,
             'dog', 1,
+            this.entityManager,
         );
 
         // Add colliders between players and terrain
-        this.physics.add.collider(this.player1.gameObject, terrainLayer);
-        this.physics.add.collider(this.player2.gameObject, terrainLayer);
+        const p1Render = this.player1Entity.getComponent<RenderComponent>('Render')!;
+        const p2Render = this.player2Entity.getComponent<RenderComponent>('Render')!;
+        this.physics.add.collider(p1Render.gameObject, terrainLayer);
+        this.physics.add.collider(p2Render.gameObject, terrainLayer);
 
         // 8. Input
         this.inputManager = new InputManager(this);
 
-        // 9. Camera
+        // 9. ECS Systems
+        this.movementSystem = new MovementSystem();
+        this.physicsSystem = new PhysicsSystem();
+        this.renderSystem = new RenderSystem();
         this.cameraSystem = new CameraSystem(this, levelWidthPx, levelHeightPx);
 
         // 10. Audio
@@ -137,15 +160,17 @@ export class GameScene extends Phaser.Scene {
     }
 
     update(time: number, delta: number): void {
-        this.player1.update(this.inputManager);
-        this.player2.update(this.inputManager);
+        // Run ECS Systems in sequential order
+        this.movementSystem.update(this.entityManager, delta, this.inputManager);
+        this.physicsSystem.update(this.entityManager, delta);
+        this.renderSystem.update(this.entityManager, delta);
 
-        // SFX
+        // SFX (queries components after physics updates)
         this.handleJumpSfx();
         this.handleLandingSfx();
 
         // Camera
-        this.cameraSystem.update(this.player1, this.player2, delta);
+        this.cameraSystem.update(this.entityManager, delta);
 
         // FPS
         if (this.showFps) {
@@ -206,20 +231,23 @@ export class GameScene extends Phaser.Scene {
     // ── Audio helpers ──
 
     private handleJumpSfx(): void {
-        const p1Body = this.player1.body;
-        const p2Body = this.player2.body;
+        const p1Body = this.player1Entity.getComponent<PhysicsBodyComponent>('PhysicsBody')!;
+        const p2Body = this.player2Entity.getComponent<PhysicsBodyComponent>('PhysicsBody')!;
 
-        if (p1Body.velocity.y < -0.5 && !this.player1WasAirborne && !this.player1.isGrounded) {
+        if (p1Body.body.velocity.y < -0.5 && !this.player1WasAirborne && !p1Body.isGrounded) {
             this.audioManager.playJump();
         }
-        if (p2Body.velocity.y < -0.5 && !this.player2WasAirborne && !this.player2.isGrounded) {
+        if (p2Body.body.velocity.y < -0.5 && !this.player2WasAirborne && !p2Body.isGrounded) {
             this.audioManager.playJump();
         }
     }
 
     private handleLandingSfx(): void {
-        const p1Grounded = this.player1.isGrounded;
-        const p2Grounded = this.player2.isGrounded;
+        const p1Body = this.player1Entity.getComponent<PhysicsBodyComponent>('PhysicsBody')!;
+        const p2Body = this.player2Entity.getComponent<PhysicsBodyComponent>('PhysicsBody')!;
+
+        const p1Grounded = p1Body.isGrounded;
+        const p2Grounded = p2Body.isGrounded;
 
         if (p1Grounded && this.player1WasAirborne) {
             this.audioManager.playLand();

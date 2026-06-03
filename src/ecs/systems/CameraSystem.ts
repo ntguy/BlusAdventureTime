@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, CAMERA } from '../constants';
-import { Player } from '../entities/Player';
+import { EntityManager } from '../Entity';
+import { PlayerComponent, TransformComponent } from '../components';
+import { GAME_WIDTH, GAME_HEIGHT, CAMERA } from '../../constants';
 
 export class CameraSystem {
     private camera: Phaser.Cameras.Scene2D.Camera;
@@ -29,10 +30,30 @@ export class CameraSystem {
         this.camera.roundPixels = false;
     }
 
-    update(player1: Player, player2: Player, delta: number): void {
+    update(entityManager: EntityManager, delta: number): void {
+        const playerEntities = entityManager.query('Player', 'Transform');
+        
+        let p1: TransformComponent | null = null;
+        let p2: TransformComponent | null = null;
+
+        for (const entity of playerEntities) {
+            const player = entity.getComponent<PlayerComponent>('Player')!;
+            const transform = entity.getComponent<TransformComponent>('Transform')!;
+            
+            if (player.playerIndex === 0) {
+                p1 = transform;
+            } else if (player.playerIndex === 1) {
+                p2 = transform;
+            }
+        }
+
+        if (!p1 || !p2) {
+            return;
+        }
+
         // 1. Calculate midpoint between players
-        const midX = (player1.x + player2.x) / 2;
-        const midY = (player1.y + player2.y) / 2;
+        const midX = (p1.x + p2.x) / 2;
+        const midY = (p1.y + p2.y) / 2;
 
         if (!this.isInitialized) {
             this.focusX = midX;
@@ -41,8 +62,8 @@ export class CameraSystem {
         }
 
         // 2. Calculate bounding box needed to show both players
-        const requiredWidth = Math.abs(player1.x - player2.x) + CAMERA.playerPaddingX * 2;
-        const requiredHeight = Math.abs(player1.y - player2.y) + CAMERA.playerPaddingY * 2;
+        const requiredWidth = Math.abs(p1.x - p2.x) + CAMERA.playerPaddingX * 2;
+        const requiredHeight = Math.abs(p1.y - p2.y) + CAMERA.playerPaddingY * 2;
 
         // 3. Find the most zoomed-in discrete level that fits both players
         this.targetZoom = CAMERA.zoomLevels[CAMERA.zoomLevels.length - 1]; // start with most zoomed out
@@ -72,7 +93,6 @@ export class CameraSystem {
         this.camera.setZoom(this.currentZoom);
 
         // 5. Calculate camera scroll position centering on (focusX, focusY)
-        // scrollX/Y are in game coordinates
         let scrollX = this.focusX - this.camera.width / 2;
         let scrollY = this.focusY - this.camera.height / 2;
 
@@ -81,11 +101,9 @@ export class CameraSystem {
         scrollY = this.camera.clampY(scrollY);
 
         // 7. Snap scroll coordinates to the physical screen pixel grid to avoid sub-pixel shimmering
-        // If zoom = Z, 1 physical pixel = 1 / Z game pixels.
         const roundedX = Math.round(scrollX * this.currentZoom) / this.currentZoom;
         const roundedY = Math.round(scrollY * this.currentZoom) / this.currentZoom;
 
         this.camera.setScroll(roundedX, roundedY);
     }
 }
-
