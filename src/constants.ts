@@ -48,7 +48,7 @@ export const CAMERA = {
     // 0.5x zoom shows 1872x1080 area (renders tiles at exactly 9px, clean integer)
     zoomLevels: [2.0, 1.5, 1.0, 0.5] as readonly number[],
     defaultZoomIndex: 0,
-    zoomTransitionSpeed: 0.08,
+    zoomTransitionSpeed: 0.15,
     followLerp: 0.1,
     playerPaddingX: 40,
     playerPaddingY: 30,

@@ -5,11 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Blu's Adventure Time - A cooperative puzzle platformer where a human and dog solve puzzles together">
     <title>Blu's Adventure Time</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+        }
+        /* Force browser to load custom fonts immediately */
+        body::after {
+            content: "Force Load";
+            font-family: 'Outfit', 'Press Start 2P';
+            visibility: hidden;
+            position: absolute;
+            height: 0;
+            width: 0;
         }
         html, body {
             width: 100%;

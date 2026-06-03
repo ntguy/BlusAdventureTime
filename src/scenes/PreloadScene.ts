@@ -61,6 +61,6 @@ export class PreloadScene extends Phaser.Scene {
     }
 
     create(): void {
-        this.scene.start('GameScene', { levelKey: 'test_level' });
+        this.scene.start('MainMenuScene');
     }
 }

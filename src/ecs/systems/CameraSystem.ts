@@ -84,7 +84,7 @@ export class CameraSystem {
         this.focusX += (midX - this.focusX) * followLerpFactor;
         this.focusY += (midY - this.focusY) * followLerpFactor;
 
-        if (Math.abs(this.currentZoom - this.targetZoom) > 0.001) {
+        if (Math.abs(this.currentZoom - this.targetZoom) > 0.015) {
             this.currentZoom += (this.targetZoom - this.currentZoom) * zoomLerpFactor;
         } else {
             this.currentZoom = this.targetZoom;
