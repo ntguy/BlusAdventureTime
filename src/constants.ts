@@ -1,0 +1,72 @@
+export const TILE_SIZE = 18;
+export const TILESET_COLS = 20;
+export const TILESET_ROWS = 9;
+export const TILESET_TOTAL = 180;
+
+export const GAME_WIDTH = 936;   // 52 tiles at 18px (renders 26 tiles at 2x zoom)
+export const GAME_HEIGHT = 540;  // 30 tiles at 18px (renders 15 tiles at 2x zoom)
+
+export const MAX_LEVEL_WIDTH = 90;   // tiles
+export const MAX_LEVEL_HEIGHT = 60;  // tiles
+
+// Arcade physics tuning
+export const PHYSICS = {
+    gravity: 800,       // Arcade gravity (px/s^2)
+    human: {
+        width: 14,          // hitbox width
+        height: 32,         // hitbox height
+        moveSpeed: 130,     // horizontal speed (px/s)
+        jumpVelocity: -280, // upward jump velocity (px/s, negative is up)
+        drag: 800,          // deceleration drag
+    },
+    dog: {
+        width: 14,
+        height: 12,
+        moveSpeed: 150,     // dog is slightly faster
+        jumpVelocity: -370, // dog jumps higher
+        drag: 800,
+    },
+} as const;
+
+// Visual sizes (the drawn rectangles)
+export const VISUAL = {
+    human: {
+        width: 18,
+        height: 36,
+    },
+    dog: {
+        width: 18,
+        height: 14,
+    },
+} as const;
+
+export const CAMERA = {
+    // Zoom levels from most zoomed-in to most zoomed-out
+    // 2x zoom shows 468x270 area (original default, pixel-perfect 1:1)
+    // 1.5x zoom shows 624x360 area (renders tiles at exactly 27px, clean integer)
+    // 1x zoom shows 936x540 area (renders tiles at exactly 18px, pixel-perfect 1:1)
+    // 0.5x zoom shows 1872x1080 area (renders tiles at exactly 9px, clean integer)
+    zoomLevels: [2.0, 1.5, 1.0, 0.5] as readonly number[],
+    defaultZoomIndex: 0,
+    zoomTransitionSpeed: 0.08,
+    followLerp: 0.1,
+    playerPaddingX: 40,
+    playerPaddingY: 30,
+} as const;
+
+// Background tileset (Kenney Pixel Platformer backgrounds)
+export const BG_TILE_SIZE = 24;
+export const BG_TILESET_COLS = 8;
+export const BG_TILESET_ROWS = 3;
+
+// Audio SFX keys — maps logical sounds to file paths
+// All currently point to collect1.mp3 as placeholder
+export const SFX = {
+    jump: 'sfx_jump',
+    land: 'sfx_land',
+    pickup: 'sfx_pickup',
+    drop: 'sfx_drop',
+    doorOpen: 'sfx_door_open',
+    checkpoint: 'sfx_checkpoint',
+    death: 'sfx_death',
+} as const;
