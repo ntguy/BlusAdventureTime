@@ -32,18 +32,26 @@ export class GameScene extends Phaser.Scene {
     private player1WasAirborne: boolean = false;
     private player2WasAirborne: boolean = false;
 
+    // Playtest mode states
+    private isTestMode: boolean = false;
+    private playtestLevelData: any = null;
+
     constructor() {
         super({ key: 'GameScene' });
     }
 
-    create(data: { levelKey: string }): void {
+    create(data?: { levelKey?: string; levelData?: any; isTestMode?: boolean }): void {
+        this.isTestMode = data?.isTestMode || false;
+        this.playtestLevelData = data?.levelData || null;
+
         // Initialize ECS Entity Manager
         this.entityManager = new EntityManager();
 
         // Load level terrain, backgrounds, and player entities via LevelLoader
+        const levelKeyOrData = data?.levelData || data?.levelKey || 'test_level';
         const { levelWidthPx, levelHeightPx, player1Entity, player2Entity } = LevelLoader.loadLevel(
             this,
-            data.levelKey,
+            levelKeyOrData,
             this.entityManager,
         );
 
@@ -164,5 +172,16 @@ export class GameScene extends Phaser.Scene {
         kb.addKey(Phaser.Input.Keyboard.KeyCodes.M).on('down', () => {
             this.audioManager.toggleMute();
         });
+
+        // ESC: Exit playtest if in test mode
+        if (this.isTestMode) {
+            kb.addKey(Phaser.Input.Keyboard.KeyCodes.ESC).on('down', () => {
+                this.sound.play('sfx_jump', { volume: 0.2, pitch: 0.8 } as any);
+                this.cameras.main.fadeOut(300, 10, 10, 26);
+                this.cameras.main.once('camerafadeoutcomplete', () => {
+                    this.scene.start('EditorScene', { levelData: this.playtestLevelData });
+                });
+            });
+        }
     }
 }

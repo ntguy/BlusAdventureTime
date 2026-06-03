@@ -12,7 +12,7 @@ export class LevelLoader {
      */
     static loadLevel(
         scene: Phaser.Scene,
-        levelKey: string,
+        levelKeyOrData: string | LevelData,
         entityManager: EntityManager,
     ): {
         levelWidthPx: number;
@@ -21,10 +21,13 @@ export class LevelLoader {
         player1Entity: Entity;
         player2Entity: Entity;
     } {
-        // 1. Get level data from cache
-        const levelData = scene.cache.json.get(levelKey) as LevelData;
+        // 1. Get level data from cache or use raw data
+        const levelData = typeof levelKeyOrData === 'string' 
+            ? (scene.cache.json.get(levelKeyOrData) as LevelData)
+            : levelKeyOrData;
+
         if (!levelData) {
-            throw new Error(`Failed to load level data: ${levelKey}`);
+            throw new Error(`Failed to load level data: ${levelKeyOrData}`);
         }
 
         const levelWidthPx = levelData.meta.width * TILE_SIZE;

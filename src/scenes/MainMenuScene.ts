@@ -88,12 +88,7 @@ export class MainMenuScene extends Phaser.Scene {
 
         this.cameras.main.fadeOut(300, 10, 10, 26);
         this.cameras.main.once('camerafadeoutcomplete', () => {
-            if (option.scene === 'EditorScene') {
-                console.log('Level Editor scene requested! (Not yet implemented)');
-                this.cameras.main.fadeIn(200);
-            } else {
-                this.scene.start(option.scene, option.data);
-            }
+            this.scene.start(option.scene, option.data);
         });
     }
 
