@@ -145,7 +145,7 @@ export class GameScene extends Phaser.Scene {
         this.handleLandingSfx();
 
         // Camera
-        this.cameraSystem.update(this.player1, this.player2);
+        this.cameraSystem.update(this.player1, this.player2, delta);
 
         // FPS
         if (this.showFps) {
