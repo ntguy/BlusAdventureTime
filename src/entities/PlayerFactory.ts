@@ -84,6 +84,8 @@ export function createPlayerEntity(
         type: 'Player',
         playerIndex,
         playerType: type,
+        spawnX: x,
+        spawnY: y
     } as PlayerComponent);
 
     return entity;

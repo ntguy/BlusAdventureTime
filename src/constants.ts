@@ -3,8 +3,8 @@ export const TILESET_COLS = 20;
 export const TILESET_ROWS = 9;
 export const TILESET_TOTAL = 180;
 
-export const GAME_WIDTH = 936;   // 52 tiles at 18px (renders 26 tiles at 2x zoom)
-export const GAME_HEIGHT = 540;  // 30 tiles at 18px (renders 15 tiles at 2x zoom)
+export const GAME_WIDTH = 954;   // 53 tiles at 18px
+export const GAME_HEIGHT = 558;  // 31 tiles at 18px
 
 export const MAX_LEVEL_WIDTH = 90;   // tiles
 export const MAX_LEVEL_HEIGHT = 60;  // tiles
@@ -73,7 +73,7 @@ export const SFX = {
 } as const;
 
 export const VISUAL_FAMILIES: Record<number, { active: number, inactive: number }> = {
-    107: { active: 108, inactive: 107 }, // Button
-    127: { active: 128, inactive: 127 }, // Lever
-    165: { active: 166, inactive: 165 }, // Spring Launcher
+    148: { active: 149, inactive: 148 }, // Button
+    64: { active: 66, inactive: 64 },   // Lever
+    107: { active: 108, inactive: 107 }, // Spring Launcher
 };

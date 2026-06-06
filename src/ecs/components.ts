@@ -27,9 +27,13 @@ export interface PlayerComponent extends Component {
     type: 'Player';
     playerIndex: 0 | 1; // 0 = Human (Player 1), 1 = Dog (Player 2)
     playerType: 'human' | 'dog';
+    spawnX: number;
+    spawnY: number;
     isClimbing?: boolean;
     idleTime?: number;
     isBarking?: boolean;
+    isDying?: boolean;
+    dyingTimer?: number;
 }
 
 export interface TriggerComponent extends Component {
@@ -39,6 +43,8 @@ export interface TriggerComponent extends Component {
     triggerType: 'interact' | 'pressure';
     isActive: boolean;
     visualType: 'button' | 'lever';
+    glowColor?: number;         // hex color for glow effect, e.g. 0xff5500
+    glowGraphics?: Phaser.GameObjects.Graphics;  // cached glow rendering
 }
 
 export interface TriggerableComponent extends Component {
@@ -69,8 +75,13 @@ export interface InteractableComponent extends Component {
 
 export interface CheckpointComponent extends Component {
     type: 'Checkpoint';
-    activated: boolean;
-    playerActivated: 0 | 1 | null;
+    humanActive: boolean;
+    dogActive: boolean;
+    flickerRate: number;      // milliseconds between flickers
+    flickerTile: number;      // GID of the alternative flicker tile
+    flickerTimer: number;     // time accumulated for flicker
+    showingAlt: boolean;      // currently showing alternative frame
+    graphics?: Phaser.GameObjects.Graphics;
 }
 
 export interface ExitDoorComponent extends Component {
@@ -85,3 +96,51 @@ export interface LauncherComponent extends Component {
     activationTimer: number;
 }
 
+export interface CatComponent extends Component {
+    type: 'Cat';
+    state: 'sleeping' | 'startled' | 'running';
+    startX: number;
+    direction: number;
+    runSpeed: number;
+    targetDistance: number;
+    startleTimer: number;
+    exclamation?: any;
+}
+
+export interface SignComponent extends Component {
+    type: 'Sign';
+    text: string;
+    textObject?: Phaser.GameObjects.Text;
+}
+
+export interface SpikesComponent extends Component {
+    type: 'Spikes';
+}
+
+export interface KeyComponent extends Component {
+    type: 'Key';
+    isPickedUp: boolean;
+    mouthSprite?: Phaser.GameObjects.Sprite; // quarter-size key overlay on dog mouth
+}
+
+export interface MovingPlatformComponent extends Component {
+    type: 'MovingPlatform';
+    channel: string;
+    startX: number;             // world px, center of origin tile at start position
+    startY: number;
+    endX: number;               // world px, center of origin tile at end position
+    endY: number;
+    velocity: number;           // px/s
+    t: number;                  // 0..1 lerp parameter (0 = start, 1 = end)
+    direction: 1 | -1 | 0;     // 1 = toward end, -1 = toward start, 0 = stopped
+    channelState: boolean;      // last known trigger channel state
+    triggerMode: 'lever' | 'button';  // determines direction behavior
+    tileSprites: Phaser.GameObjects.Sprite[];
+    tileBodies: Phaser.Physics.Arcade.Body[];
+    tileOffsets: { dx: number; dy: number }[];  // relative offsets for multi-tile
+    glowColor: number;          // hex glow color matching trigger pair
+    glowGraphics?: Phaser.GameObjects.Graphics;
+    prevX: number;              // previous frame world X (for rider delta calc)
+    prevY: number;              // previous frame world Y
+    movingDirection?: 1 | -1;   // tracks travel direction when button is held
+}

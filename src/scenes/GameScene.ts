@@ -12,6 +12,12 @@ import { RenderSystem } from '../ecs/systems/RenderSystem';
 import { CameraSystem } from '../ecs/systems/CameraSystem';
 import { TriggerSystem } from '../ecs/systems/TriggerSystem';
 import { LauncherSystem } from '../ecs/systems/LauncherSystem';
+import { CheckpointSystem } from '../ecs/systems/CheckpointSystem';
+import { CatSystem } from '../ecs/systems/CatSystem';
+import { SignSystem } from '../ecs/systems/SignSystem';
+import { SpikesSystem } from '../ecs/systems/SpikesSystem';
+import { KeySystem } from '../ecs/systems/KeySystem';
+import { MovingPlatformSystem } from '../ecs/systems/MovingPlatformSystem';
 
 export class GameScene extends Phaser.Scene {
     private entityManager!: EntityManager;
@@ -27,6 +33,12 @@ export class GameScene extends Phaser.Scene {
     private cameraSystem!: CameraSystem;
     private triggerSystem!: TriggerSystem;
     private launcherSystem!: LauncherSystem;
+    private checkpointSystem!: CheckpointSystem;
+    private catSystem!: CatSystem;
+    private signSystem!: SignSystem;
+    private spikesSystem!: SpikesSystem;
+    private keySystem!: KeySystem;
+    private movingPlatformSystem!: MovingPlatformSystem;
 
     // FPS display
     private fpsText!: Phaser.GameObjects.Text;
@@ -75,6 +87,12 @@ export class GameScene extends Phaser.Scene {
         this.cameraSystem = new CameraSystem(this, levelWidthPx, levelHeightPx);
         this.triggerSystem = new TriggerSystem();
         this.launcherSystem = new LauncherSystem();
+        this.checkpointSystem = new CheckpointSystem();
+        this.catSystem = new CatSystem();
+        this.signSystem = new SignSystem();
+        this.spikesSystem = new SpikesSystem(this.movementSystem);
+        this.keySystem = new KeySystem();
+        this.movingPlatformSystem = new MovingPlatformSystem();
 
         // Sync initial trigger/target states
         this.triggerSystem.syncAll(this.entityManager);
@@ -101,9 +119,15 @@ export class GameScene extends Phaser.Scene {
         this.inputManager.update();
 
         // Run ECS Systems in sequential order
+        this.keySystem.update(this.entityManager, delta, this.inputManager);
         this.movementSystem.update(this.entityManager, delta, this.inputManager);
         this.launcherSystem.update(this.entityManager, delta);
+        this.checkpointSystem.update(this.entityManager, delta);
         this.triggerSystem.update(this.entityManager, delta, this.inputManager);
+        this.catSystem.update(this.entityManager, delta, this.inputManager);
+        this.signSystem.update(this.entityManager, delta);
+        this.spikesSystem.update(this.entityManager, delta);
+        this.movingPlatformSystem.update(this.entityManager, delta);
         this.physicsSystem.update(this.entityManager, delta);
         this.renderSystem.update(this.entityManager, delta);
 

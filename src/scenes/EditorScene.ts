@@ -9,10 +9,13 @@ export class EditorScene extends Phaser.Scene {
     private uiCamera!: Phaser.Cameras.Scene2D.Camera;
 
     // Editor States
-    private activeLayer: 'terrain' | 'background' | 'entities' = 'terrain';
-    private activeTool: 'draw' | 'erase' = 'draw';
+    private activeTab: 'tiles' | 'entities' = 'tiles';
+    private activeTool: 'terrain' | 'bg' | 'erase' = 'terrain';
     private selectedTileIndex: number = 0; 
     private selectedEntityType: string = 'crate';
+    private tileTags: Record<string, number[]> = {};
+    private activeTagFilter: string = 'all';
+    private tagTextObjects: Phaser.GameObjects.Text[] = [];
     
     // Sidebar scrolling state
     private paletteScrollY: number = 0;
@@ -36,6 +39,7 @@ export class EditorScene extends Phaser.Scene {
     private paletteSprites: Phaser.GameObjects.Sprite[] = [];
     private paletteTexts: Phaser.GameObjects.Text[] = [];
     private entityVisuals: Map<string, Phaser.GameObjects.Text> = new Map();
+    private bgOverlays: Map<string, Phaser.GameObjects.Text> = new Map();
 
     private selectedEntity: EntityData | null = null;
     private selectedEntityText!: Phaser.GameObjects.Text;
@@ -55,7 +59,11 @@ export class EditorScene extends Phaser.Scene {
         { label: 'LD', type: 'ladder', color: '#a8a8a8', name: 'LADDER' },
         { label: 'BT', type: 'button', color: '#ff5555', name: 'BUTTON/LEVER' },
         { label: 'GT', type: 'gate', color: '#ffaa00', name: 'GATE' },
-        { label: 'LN', type: 'launcher', color: '#ff00aa', name: 'LAUNCHER' }
+        { label: 'LN', type: 'launcher', color: '#ff00aa', name: 'LAUNCHER' },
+        { label: 'CT', type: 'cat', color: '#ff55ff', name: 'CAT' },
+        { label: 'SN', type: 'sign', color: '#e2a76f', name: 'SIGN' },
+        { label: 'SP', type: 'spikes', color: '#ff3333', name: 'SPIKES' },
+        { label: 'MP', type: 'movingPlatform', color: '#44aaff', name: 'MOVING PLATFORM' }
     ];
 
     constructor() {
@@ -76,14 +84,14 @@ export class EditorScene extends Phaser.Scene {
         }
 
         // 2. Setup Camera viewports
-        this.cameras.main.setViewport(0, 0, 656, 540);
+        this.cameras.main.setViewport(0, 0, 674, 558);
         this.cameras.main.setScroll(0, 0);
         this.cameras.main.setZoom(1.0);
 
         this.cameras.main.setBackgroundColor('#1a1a2e');
 
-        this.uiCamera = this.cameras.add(656, 0, 280, 540);
-        this.uiCamera.setScroll(656, 0);
+        this.uiCamera = this.cameras.add(674, 0, 280, 558);
+        this.uiCamera.setScroll(674, 0);
         this.uiCamera.setZoom(1.0);
 
         // 3. Create Groups
@@ -97,6 +105,9 @@ export class EditorScene extends Phaser.Scene {
         this.gridGraphics = this.add.graphics();
         this.workspaceGroup.add(this.gridGraphics);
         this.drawGrid();
+
+        // Load tile tags
+        this.loadTileTags();
 
         // 6. Draw sidebar elements
         this.createSidebarUI();
@@ -135,8 +146,8 @@ export class EditorScene extends Phaser.Scene {
         if (cursors.down.isDown || (keys.S && keys.S.isDown)) this.cameras.main.scrollY += panSpeed;
 
         // Clamp camera scroll bounds
-        const maxScrollX = this.levelData.meta.width * TILE_SIZE - 656;
-        const maxScrollY = this.levelData.meta.height * TILE_SIZE - 540;
+        const maxScrollX = this.levelData.meta.width * TILE_SIZE - 674;
+        const maxScrollY = this.levelData.meta.height * TILE_SIZE - 558;
         this.cameras.main.scrollX = Phaser.Math.Clamp(this.cameras.main.scrollX, -100, maxScrollX + 100);
         this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY, -100, maxScrollY + 100);
     }
@@ -173,8 +184,39 @@ export class EditorScene extends Phaser.Scene {
         };
     }
 
+    private addBgOverlay(tx: number, ty: number): void {
+        const key = `${tx},${ty}`;
+        if (this.bgOverlays.has(key)) return;
+
+        const txt = this.add.text(tx * TILE_SIZE + TILE_SIZE / 2, ty * TILE_SIZE + TILE_SIZE / 2, "BG", {
+            fontFamily: '"Press Start 2P"',
+            fontSize: '5px',
+            color: '#ffffff'
+        }).setOrigin(0.5).setDepth(15).setAlpha(0.5);
+
+        this.workspaceGroup.add(txt);
+        this.uiCamera.ignore(txt);
+        this.bgOverlays.set(key, txt);
+    }
+
+    private removeBgOverlay(tx: number, ty: number): void {
+        const key = `${tx},${ty}`;
+        const txt = this.bgOverlays.get(key);
+        if (txt) {
+            txt.destroy();
+            this.bgOverlays.delete(key);
+        }
+    }
+
+    private clearBgOverlays(): void {
+        this.bgOverlays.forEach(txt => txt.destroy());
+        this.bgOverlays.clear();
+    }
+
     private createWorkspaceTilemap(): void {
         if (this.map) this.map.destroy();
+
+        this.clearBgOverlays();
 
         this.map = this.make.tilemap({
             tileWidth: TILE_SIZE,
@@ -206,7 +248,10 @@ export class EditorScene extends Phaser.Scene {
             if (terrVal >= 0) this.terrainLayer.putTileAt(terrVal, tx, ty);
 
             const bgVal = this.levelData.layers.background[i];
-            if (bgVal >= 0) this.bgLayer.putTileAt(bgVal, tx, ty);
+            if (bgVal >= 0) {
+                this.bgLayer.putTileAt(bgVal, tx, ty);
+                this.addBgOverlay(tx, ty);
+            }
         }
     }
 
@@ -241,7 +286,11 @@ export class EditorScene extends Phaser.Scene {
             ladder: { t: 'LD', c: '#a8a8a8' },
             button: { t: 'BT', c: '#ff5555' },
             gate: { t: 'GT', c: '#ffaa00' },
-            launcher: { t: 'LN', c: '#ff00aa' }
+            launcher: { t: 'LN', c: '#ff00aa' },
+            cat: { t: 'CT', c: '#ff55ff' },
+            sign: { t: 'SN', c: '#e2a76f' },
+            spikes: { t: 'SP', c: '#ff3333' },
+            movingPlatform: { t: 'MP', c: '#44aaff' }
         };
 
         const config = labels[ent.type] || { t: '?', c: '#ffffff' };
@@ -266,6 +315,50 @@ export class EditorScene extends Phaser.Scene {
         this.workspaceGroup.add(txt);
         this.uiCamera.ignore(txt); // prevent rendering on UI Camera
         this.entityVisuals.set(key, txt);
+
+        // Draw movement path arrow for moving platforms
+        if (ent.type === 'movingPlatform') {
+            const props = ent.properties || {};
+            const endTileX = props.endX !== undefined ? Number(props.endX) : ent.x;
+            const endTileY = props.endY !== undefined ? Number(props.endY) : ent.y;
+            if (endTileX !== ent.x || endTileY !== ent.y) {
+                const startPx = { x: ent.x * 18 + 9, y: ent.y * 18 + 9 };
+                const endPx = { x: endTileX * 18 + 9, y: endTileY * 18 + 9 };
+                const arrow = this.add.graphics();
+                arrow.lineStyle(1, 0x44aaff, 0.6);
+                // Draw dashed line
+                const dx = endPx.x - startPx.x;
+                const dy = endPx.y - startPx.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const dashLen = 4;
+                const gapLen = 3;
+                let drawn = 0;
+                while (drawn < dist) {
+                    const s = drawn / dist;
+                    const e = Math.min((drawn + dashLen) / dist, 1);
+                    arrow.moveTo(startPx.x + dx * s, startPx.y + dy * s);
+                    arrow.lineTo(startPx.x + dx * e, startPx.y + dy * e);
+                    drawn += dashLen + gapLen;
+                }
+                arrow.strokePath();
+                // Draw arrowhead at end
+                const angle = Math.atan2(dy, dx);
+                const headLen = 5;
+                arrow.fillStyle(0x44aaff, 0.8);
+                arrow.fillTriangle(
+                    endPx.x, endPx.y,
+                    endPx.x - headLen * Math.cos(angle - 0.4), endPx.y - headLen * Math.sin(angle - 0.4),
+                    endPx.x - headLen * Math.cos(angle + 0.4), endPx.y - headLen * Math.sin(angle + 0.4)
+                );
+                arrow.setDepth(24);
+                this.workspaceGroup.add(arrow);
+                this.uiCamera.ignore(arrow);
+            }
+
+            // Also show channel label
+            const ch = props.channel || '1';
+            txt.setText(`M${ch}`);
+        }
     }
 
     private removeEntityAt(tileX: number, tileY: number): void {
@@ -279,7 +372,7 @@ export class EditorScene extends Phaser.Scene {
     }
 
     private createSidebarUI(): void {
-        const startX = 656; // Sidebar starts here
+        const startX = 674; // Sidebar starts here
         const center = startX + 140;
 
         // Solid background
@@ -291,7 +384,7 @@ export class EditorScene extends Phaser.Scene {
         this.uiGroup.add(sidebarBg);
 
         // Header Title
-        const titleText = this.add.text(center, 22, "📝 EDITOR", {
+        const titleText = this.add.text(center, 18, "📝 EDITOR", {
             fontFamily: '"Press Start 2P"',
             fontSize: '16px',
             color: '#ffff00'
@@ -299,7 +392,7 @@ export class EditorScene extends Phaser.Scene {
         this.uiGroup.add(titleText);
 
         // Action buttons
-        const actionRowY = 55;
+        const actionRowY = 46;
         const actPlay = this.createSidebarButton("🎮PLAY", startX + 35, actionRowY, () => this.playtestLevel());
         const actSave = this.createSidebarButton("💾SAVE", startX + 90, actionRowY, () => this.saveLevel());
         const actLoad = this.createSidebarButton("📂LOAD", startX + 145, actionRowY, () => this.loadLevel());
@@ -313,32 +406,32 @@ export class EditorScene extends Phaser.Scene {
         this.uiGroup.add(actExit);
 
         // Tools Title Row
-        const toolY = 95;
+        const toolY = 72;
         this.add.text(startX + 18, toolY, "TOOL:", { fontFamily: '"Press Start 2P"', fontSize: '9px', color: '#888888' });
-        this.toolButtons['draw'] = this.createSidebarButton("✏️ DRAW", startX + 105, toolY, () => this.setTool('draw'));
-        this.toolButtons['erase'] = this.createSidebarButton("❌ ERASE", startX + 185, toolY, () => this.setTool('erase'));
-        this.uiGroup.add(this.toolButtons['draw']);
+        this.toolButtons['terrain'] = this.createSidebarButton("TERRAIN", startX + 95, toolY, () => this.setTool('terrain'));
+        this.toolButtons['bg'] = this.createSidebarButton("BG", startX + 160, toolY, () => this.setTool('bg'));
+        this.toolButtons['erase'] = this.createSidebarButton("ERASE", startX + 215, toolY, () => this.setTool('erase'));
+        this.uiGroup.add(this.toolButtons['terrain']);
+        this.uiGroup.add(this.toolButtons['bg']);
         this.uiGroup.add(this.toolButtons['erase']);
 
         // Layers Title Row
-        const layerY = 135;
+        const layerY = 96;
         this.add.text(startX + 18, layerY, "LAYER:", { fontFamily: '"Press Start 2P"', fontSize: '9px', color: '#888888' });
-        this.layerButtons['terrain'] = this.createSidebarButton("TERRAIN", startX + 85, layerY, () => this.setLayer('terrain'));
-        this.layerButtons['background'] = this.createSidebarButton("BG", startX + 160, layerY, () => this.setLayer('background'));
-        this.layerButtons['entities'] = this.createSidebarButton("ENTITY", startX + 225, layerY, () => this.setLayer('entities'));
+        this.layerButtons['tiles'] = this.createSidebarButton("TILES", startX + 105, layerY, () => this.setTab('tiles'));
+        this.layerButtons['entities'] = this.createSidebarButton("ENTITY", startX + 200, layerY, () => this.setTab('entities'));
         
-        this.uiGroup.add(this.layerButtons['terrain']);
-        this.uiGroup.add(this.layerButtons['background']);
+        this.uiGroup.add(this.layerButtons['tiles']);
         this.uiGroup.add(this.layerButtons['entities']);
 
-        // Separator line (shifted to y=165)
+        // Separator line
         const sep = this.add.graphics();
         sep.lineStyle(1, 0x222233, 0.8);
-        sep.strokeLineShape(new Phaser.Geom.Line(startX + 15, 165, startX + 265, 165));
+        sep.strokeLineShape(new Phaser.Geom.Line(startX + 15, 116, startX + 265, 116));
         this.uiGroup.add(sep);
 
-        // Selected GID/Tilecode text display at y=180
-        this.selectedTilecodeText = this.add.text(center, 180, "", {
+        // Selected GID/Tilecode text display at y=132
+        this.selectedTilecodeText = this.add.text(center, 132, "", {
             fontFamily: '"Press Start 2P"',
             fontSize: '7px',
             color: '#00ffff',
@@ -348,7 +441,7 @@ export class EditorScene extends Phaser.Scene {
         this.cameras.main.ignore(this.selectedTilecodeText);
 
         // Properties Panel Text/Button at the bottom
-        this.selectedEntityText = this.add.text(center, 475, "Click entity to\nedit properties", {
+        this.selectedEntityText = this.add.text(center, 475, "", {
             fontFamily: '"Press Start 2P"',
             fontSize: '7px',
             color: '#aaaaaa',
@@ -377,96 +470,99 @@ export class EditorScene extends Phaser.Scene {
         this.paletteSprites = [];
         this.paletteTexts.forEach(t => t.destroy());
         this.paletteTexts = [];
+        this.tagTextObjects.forEach(t => t.destroy());
+        this.tagTextObjects = [];
 
-        const startX = 656;
-        const gridStartX = startX + 32;
-        const gridStartY = 200;
-        const spacingX = 46;
-        const spacingY = 46;
+        const startX = 674;
+        const gridStartX = startX + 26;
+        const tagGridStartY = 152;
+        const tagSpacingY = 22;
+        const spacingX = 34;
+        const spacingY = 34;
 
-        if (this.activeLayer === 'terrain') {
-            // ALL 180 terrain tiles
-            const totalTerrainTiles = 180;
-            for (let i = 0; i < totalTerrainTiles; i++) {
-                const col = i % 5;
-                const row = Math.floor(i / 5);
+        if (this.activeTab === 'tiles') {
+            // 1. Build and render tag buttons at the top of the scrollable region
+            const tags = ['all', ...Object.keys(this.tileTags), 'Manage Tags'];
+            const tagRows = Math.ceil(tags.length / 2);
+
+            tags.forEach((tag, idx) => {
+                const col = idx % 2;
+                const row = Math.floor(idx / 2);
+                const x = startX + 70 + col * 135;
+                const y = tagGridStartY + row * tagSpacingY;
+
+                let label = `[ ${tag.toUpperCase()} ]`;
+                if (tag === 'Manage Tags') {
+                    label = `[ 🏷️ TAGS ]`;
+                } else if (tag === this.activeTagFilter) {
+                    label = `[ *${tag.toUpperCase()}* ]`;
+                }
+
+                const txtObj = this.add.text(x, y, label, {
+                    fontFamily: '"Press Start 2P"',
+                    fontSize: '8px',
+                    color: tag === 'Manage Tags' ? '#ffaa00' : (tag === this.activeTagFilter ? '#ffff00' : '#888888')
+                }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+                txtObj.on('pointerdown', () => {
+                    if (tag === 'Manage Tags') {
+                        this.showTagManager();
+                    } else {
+                        if (this.activeTagFilter === tag) {
+                            this.activeTagFilter = 'all';
+                        } else {
+                            this.activeTagFilter = tag;
+                        }
+                        this.paletteScrollY = 0;
+                        this.buildPaletteUI();
+                    }
+                });
+
+                this.uiGroup.add(txtObj);
+                this.cameras.main.ignore(txtObj);
+                this.tagTextObjects.push(txtObj);
+            });
+
+            // 2. Render filtered tiles below tags
+            const tileGridStartY = tagGridStartY + tagRows * tagSpacingY + 10;
+            const filteredTiles = this.getFilteredTiles();
+
+            filteredTiles.forEach((tile, idx) => {
+                const col = idx % 7;
+                const row = Math.floor(idx / 7);
                 const x = gridStartX + col * spacingX;
-                const y = gridStartY + row * spacingY;
+                const y = tileGridStartY + row * spacingY;
 
-                const sprite = this.add.sprite(x, y, 'tilemap_packed', i);
-                sprite.setScale(2.0); 
+                const sprite = this.add.sprite(x, y, tile.texture, tile.frame);
+                sprite.setScale(tile.scale);
                 sprite.setInteractive({ useHandCursor: true });
-                
-                const currentIdx = i;
+                sprite.setData('gid', tile.gid);
+
                 sprite.on('pointerdown', () => {
-                    this.selectedTileIndex = currentIdx;
+                    this.selectedTileIndex = tile.gid;
+                    // Auto switch tool based on background vs terrain GID
+                    const correctTool = tile.gid >= 180 ? 'bg' : 'terrain';
+                    if (this.activeTool !== correctTool) {
+                        this.setTool(correctTool);
+                    }
                     this.updateSelectionHighlights();
                 });
 
                 this.uiGroup.add(sprite);
                 this.cameras.main.ignore(sprite);
                 this.paletteSprites.push(sprite);
-            }
+            });
         } 
-        else if (this.activeLayer === 'background') {
-            // First: 24 background tiles from bg_tilemap_packed (GIDs 180..203)
-            const totalBgTiles = 24;
-            for (let i = 0; i < totalBgTiles; i++) {
-                const col = i % 5;
-                const row = Math.floor(i / 5);
-                const x = gridStartX + col * spacingX;
-                const y = gridStartY + row * spacingY;
-
-                const sprite = this.add.sprite(x, y, 'bg_tilemap_packed', i);
-                sprite.setScale(1.5);
-                sprite.setInteractive({ useHandCursor: true });
-                
-                const currentGid = 180 + i;
-                sprite.on('pointerdown', () => {
-                    this.selectedTileIndex = currentGid;
-                    this.updateSelectionHighlights();
-                });
-
-                this.uiGroup.add(sprite);
-                this.cameras.main.ignore(sprite);
-                this.paletteSprites.push(sprite);
-            }
-
-            // Second: 180 terrain tiles from tilemap_packed (GIDs 0..179)
-            const totalTerrainTiles = 180;
-            const startRowForTerrain = Math.ceil(totalBgTiles / 5); // 5 rows offset
-            for (let i = 0; i < totalTerrainTiles; i++) {
-                const col = i % 5;
-                const row = startRowForTerrain + Math.floor(i / 5);
-                const x = gridStartX + col * spacingX;
-                const y = gridStartY + row * spacingY;
-
-                const sprite = this.add.sprite(x, y, 'tilemap_packed', i);
-                sprite.setScale(2.0);
-                sprite.setInteractive({ useHandCursor: true });
-
-                const currentGid = i;
-                sprite.on('pointerdown', () => {
-                    this.selectedTileIndex = currentGid;
-                    this.updateSelectionHighlights();
-                });
-
-                this.uiGroup.add(sprite);
-                this.cameras.main.ignore(sprite);
-                this.paletteSprites.push(sprite);
-            }
-        }
-        else if (this.activeLayer === 'entities') {
-            // Entities selection with text box indicators (Letters)
+        else if (this.activeTab === 'entities') {
             this.entityPalette.forEach((ent, idx) => {
-                const col = idx % 5;
-                const row = Math.floor(idx / 5);
+                const col = idx % 7;
+                const row = Math.floor(idx / 7);
                 const x = gridStartX + col * spacingX;
-                const y = gridStartY + row * spacingY;
+                const y = tagGridStartY + row * spacingY;
 
                 const txtObj = this.add.text(x, y, ent.label, {
                     fontFamily: '"Press Start 2P"',
-                    fontSize: '16px',
+                    fontSize: '11px',
                     color: ent.color
                 }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
@@ -486,29 +582,46 @@ export class EditorScene extends Phaser.Scene {
     }
 
     private updatePalettePositions(): void {
-        const gridStartY = 200;
-        const spacingY = 46;
+        const startX = 674;
+        const tagGridStartY = 152;
+        const tagSpacingY = 22;
+        const spacingY = 34;
 
-        this.paletteSprites.forEach((spr, idx) => {
-            const row = Math.floor(idx / 5);
-            spr.y = gridStartY + row * spacingY + this.paletteScrollY;
+        if (this.activeTab === 'tiles') {
+            // Update tag buttons positions
+            const tags = ['all', ...Object.keys(this.tileTags), 'Manage Tags'];
+            const tagRows = Math.ceil(tags.length / 2);
             
-            // Mask items scrolling outside y boundaries: 175 to 450
-            const isVisible = spr.y >= 175 && spr.y <= 450;
-            spr.setVisible(isVisible);
-            if (isVisible) spr.setInteractive();
-            else spr.disableInteractive();
-        });
+            this.tagTextObjects.forEach((txt, idx) => {
+                const row = Math.floor(idx / 2);
+                txt.y = tagGridStartY + row * tagSpacingY + this.paletteScrollY;
+                const isVisible = txt.y >= 142 && txt.y <= 455;
+                txt.setVisible(isVisible);
+                if (isVisible) txt.setInteractive();
+                else txt.disableInteractive();
+            });
 
-        this.paletteTexts.forEach((txt, idx) => {
-            const row = Math.floor(idx / 5);
-            txt.y = gridStartY + row * spacingY + this.paletteScrollY;
-            
-            const isVisible = txt.y >= 175 && txt.y <= 450;
-            txt.setVisible(isVisible);
-            if (isVisible) txt.setInteractive();
-            else txt.disableInteractive();
-        });
+            // Update tile sprites positions
+            const tileGridStartY = tagGridStartY + tagRows * tagSpacingY + 10;
+            this.paletteSprites.forEach((spr, idx) => {
+                const row = Math.floor(idx / 7);
+                spr.y = tileGridStartY + row * spacingY + this.paletteScrollY;
+                const isVisible = spr.y >= 142 && spr.y <= 455;
+                spr.setVisible(isVisible);
+                if (isVisible) spr.setInteractive();
+                else spr.disableInteractive();
+            });
+        } 
+        else if (this.activeTab === 'entities') {
+            this.paletteTexts.forEach((txt, idx) => {
+                const row = Math.floor(idx / 7);
+                txt.y = tagGridStartY + row * spacingY + this.paletteScrollY;
+                const isVisible = txt.y >= 142 && txt.y <= 455;
+                txt.setVisible(isVisible);
+                if (isVisible) txt.setInteractive();
+                else txt.disableInteractive();
+            });
+        }
 
         this.updateSelectionHighlights();
     }
@@ -516,7 +629,7 @@ export class EditorScene extends Phaser.Scene {
     private updateSelectionHighlights(): void {
         Object.keys(this.layerButtons).forEach(key => {
             const btn = this.layerButtons[key];
-            btn.setColor(this.activeLayer === key ? '#00ffff' : '#888888');
+            btn.setColor(this.activeTab === key ? '#00ffff' : '#888888');
         });
 
         Object.keys(this.toolButtons).forEach(key => {
@@ -524,9 +637,9 @@ export class EditorScene extends Phaser.Scene {
             btn.setColor(this.activeTool === key ? '#ffff00' : '#888888');
         });
 
-        if (this.activeLayer === 'terrain' || this.activeLayer === 'background') {
+        if (this.activeTab === 'tiles') {
             this.selectedTilecodeText.setText(`SELECTED TILE CODE: ${this.selectedTileIndex}`);
-        } else if (this.activeLayer === 'entities') {
+        } else if (this.activeTab === 'entities') {
             this.selectedTilecodeText.setText(`SELECTED ENTITY:\n${this.selectedEntityType.toUpperCase()}`);
         }
 
@@ -538,37 +651,19 @@ export class EditorScene extends Phaser.Scene {
 
         this.paletteHighlight.lineStyle(2, 0xffff00, 1);
 
-        if (this.activeLayer === 'terrain') {
-            const activeIdx = this.selectedTileIndex;
-            if (activeIdx >= 0 && this.paletteSprites[activeIdx]) {
-                const spr = this.paletteSprites[activeIdx];
-                if (spr.visible) {
-                    this.paletteHighlight.strokeRect(spr.x - 18, spr.y - 18, 36, 36);
-                }
-            }
-        } 
-        else if (this.activeLayer === 'background') {
+        if (this.activeTab === 'tiles') {
             const activeGid = this.selectedTileIndex;
-            let activeIdx = -1;
-            if (activeGid >= 180) {
-                activeIdx = activeGid - 180;
-            } else if (activeGid >= 0) {
-                activeIdx = 24 + activeGid;
-            }
-
-            if (activeIdx >= 0 && this.paletteSprites[activeIdx]) {
-                const spr = this.paletteSprites[activeIdx];
-                if (spr.visible) {
-                    this.paletteHighlight.strokeRect(spr.x - 18, spr.y - 18, 36, 36);
-                }
+            const spr = this.paletteSprites.find(s => s.getData('gid') === activeGid);
+            if (spr && spr.visible) {
+                this.paletteHighlight.strokeRect(spr.x - 15, spr.y - 15, 30, 30);
             }
         }
-        else if (this.activeLayer === 'entities') {
+        else if (this.activeTab === 'entities') {
             const activeIdx = this.entityPalette.findIndex(e => e.type === this.selectedEntityType);
             if (activeIdx >= 0 && this.paletteTexts[activeIdx]) {
                 const txt = this.paletteTexts[activeIdx];
                 if (txt.visible) {
-                    this.paletteHighlight.strokeRect(txt.x - 18, txt.y - 18, 36, 36);
+                    this.paletteHighlight.strokeRect(txt.x - 15, txt.y - 15, 30, 30);
                 }
             }
         }
@@ -577,17 +672,22 @@ export class EditorScene extends Phaser.Scene {
     private setupPanningAndZooming(): void {
         // 1. Mouse wheel zooming & sidebar scrolling
         this.input.on('wheel', (pointer: Phaser.Input.Pointer, gameObjects: any, deltaX: number, deltaY: number, deltaZ: number) => {
-            if (pointer.x >= 656) {
+            if (pointer.x >= 674) {
                 // Scroll visual palette
                 this.paletteScrollY -= deltaY * 0.4;
-                
                 let maxScroll = 0;
-                if (this.activeLayer === 'terrain') {
-                    maxScroll = -1450;
-                } else if (this.activeLayer === 'background') {
-                    maxScroll = -1680;
+                if (this.activeTab === 'tiles') {
+                    const tags = ['all', ...Object.keys(this.tileTags), 'Manage Tags'];
+                    const tagRows = Math.ceil(tags.length / 2);
+                    const filteredTiles = this.getFilteredTiles();
+                    const tileRows = Math.ceil(filteredTiles.length / 7);
+                    const totalHeight = tagRows * 22 + 10 + tileRows * 34;
+                    maxScroll = Math.min(0, 313 - totalHeight - 20);
+                } else {
+                    const entityRows = Math.ceil(this.entityPalette.length / 7);
+                    const totalHeight = entityRows * 34;
+                    maxScroll = Math.min(0, 313 - totalHeight - 20);
                 }
-
                 this.paletteScrollY = Phaser.Math.Clamp(this.paletteScrollY, maxScroll, 0);
                 this.updatePalettePositions();
             } else {
@@ -613,12 +713,21 @@ export class EditorScene extends Phaser.Scene {
         const kb = this.input.keyboard!;
         
         kb.addKey(Phaser.Input.Keyboard.KeyCodes.P).on('down', () => this.playtestLevel());
-        kb.addKey(Phaser.Input.Keyboard.KeyCodes.B).on('down', () => this.setTool('draw'));
+        kb.addKey(Phaser.Input.Keyboard.KeyCodes.B).on('down', () => this.setTool('terrain'));
+        kb.addKey(Phaser.Input.Keyboard.KeyCodes.V).on('down', () => this.setTool('bg'));
         kb.addKey(Phaser.Input.Keyboard.KeyCodes.E).on('down', () => this.setTool('erase'));
 
-        kb.addKey(Phaser.Input.Keyboard.KeyCodes.ONE).on('down', () => this.setLayer('terrain'));
-        kb.addKey(Phaser.Input.Keyboard.KeyCodes.TWO).on('down', () => this.setLayer('background'));
-        kb.addKey(Phaser.Input.Keyboard.KeyCodes.THREE).on('down', () => this.setLayer('entities'));
+        kb.addKey(Phaser.Input.Keyboard.KeyCodes.ONE).on('down', () => {
+            this.setTab('tiles');
+            this.setTool('terrain');
+        });
+        kb.addKey(Phaser.Input.Keyboard.KeyCodes.TWO).on('down', () => {
+            this.setTab('tiles');
+            this.setTool('bg');
+        });
+        kb.addKey(Phaser.Input.Keyboard.KeyCodes.THREE).on('down', () => {
+            this.setTab('entities');
+        });
     }
 
     private setupPointerInput(): void {
@@ -636,7 +745,7 @@ export class EditorScene extends Phaser.Scene {
     }
 
     private paintGridAt(pointer: Phaser.Input.Pointer): void {
-        if (pointer.x >= 656) return;
+        if (pointer.x >= 674) return;
 
         const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
         const tileX = Math.floor(worldPoint.x / TILE_SIZE);
@@ -649,14 +758,23 @@ export class EditorScene extends Phaser.Scene {
 
         const idx = tileY * w + tileX;
 
-        if (this.activeTool === 'draw') {
-            if (this.activeLayer === 'terrain') {
+        if (this.activeTab === 'tiles') {
+            if (this.activeTool === 'terrain') {
                 this.terrainLayer.putTileAt(this.selectedTileIndex, tileX, tileY);
                 this.levelData.layers.terrain[idx] = this.selectedTileIndex;
-            } else if (this.activeLayer === 'background') {
+            } else if (this.activeTool === 'bg') {
                 this.bgLayer.putTileAt(this.selectedTileIndex, tileX, tileY);
                 this.levelData.layers.background[idx] = this.selectedTileIndex;
-            } else if (this.activeLayer === 'entities') {
+                this.addBgOverlay(tileX, tileY);
+            } else if (this.activeTool === 'erase') {
+                this.terrainLayer.removeTileAt(tileX, tileY);
+                this.levelData.layers.terrain[idx] = -1;
+                this.bgLayer.removeTileAt(tileX, tileY);
+                this.levelData.layers.background[idx] = -1;
+                this.removeBgOverlay(tileX, tileY);
+            }
+        } else if (this.activeTab === 'entities') {
+            if (this.activeTool === 'terrain' || this.activeTool === 'bg') {
                 const existing = this.levelData.entities.find(e => e.x === tileX && e.y === tileY);
                 if (existing) {
                     this.selectedEntity = existing;
@@ -671,15 +789,7 @@ export class EditorScene extends Phaser.Scene {
                 this.drawEntityVisual(ent);
                 this.selectedEntity = ent;
                 this.updateSelectedEntityUI();
-            }
-        } else if (this.activeTool === 'erase') {
-            if (this.activeLayer === 'terrain') {
-                this.terrainLayer.removeTileAt(tileX, tileY);
-                this.levelData.layers.terrain[idx] = -1;
-            } else if (this.activeLayer === 'background') {
-                this.bgLayer.removeTileAt(tileX, tileY);
-                this.levelData.layers.background[idx] = -1;
-            } else if (this.activeLayer === 'entities') {
+            } else if (this.activeTool === 'erase') {
                 const existing = this.levelData.entities.find(e => e.x === tileX && e.y === tileY);
                 if (existing && this.selectedEntity === existing) {
                     this.selectedEntity = null;
@@ -690,17 +800,17 @@ export class EditorScene extends Phaser.Scene {
         }
     }
 
-    private setLayer(layer: 'terrain' | 'background' | 'entities'): void {
-        if (this.activeLayer === layer) return;
-        this.activeLayer = layer;
-        this.activeTool = 'draw';
-        this.paletteScrollY = 0; // Reset scroll position when layer changes
+    private setTab(tab: 'tiles' | 'entities'): void {
+        if (this.activeTab === tab) return;
+        this.activeTab = tab;
+        this.activeTool = 'terrain'; // default to painting tool
+        this.paletteScrollY = 0; // Reset scroll position when tab changes
         this.buildPaletteUI();
         this.updatePalettePositions();
         this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.5 } as any);
     }
 
-    private setTool(tool: 'draw' | 'erase'): void {
+    private setTool(tool: 'terrain' | 'bg' | 'erase'): void {
         if (this.activeTool === tool) return;
         this.activeTool = tool;
         this.updateSelectionHighlights();
@@ -819,7 +929,7 @@ export class EditorScene extends Phaser.Scene {
 
     private updateSelectedEntityUI(): void {
         if (!this.selectedEntity) {
-            this.selectedEntityText.setText("Click entity to\nedit properties");
+            this.selectedEntityText.setText("");
             this.selectedEntityText.setColor('#aaaaaa');
             this.editPropsButton.setVisible(false);
             return;
@@ -831,16 +941,31 @@ export class EditorScene extends Phaser.Scene {
 
         if (ent.type === 'button') {
             const ch = props.channel || '1';
-            const tType = props.triggerType || 'interact';
-            const vType = props.visualType || 'lever';
+            const tType = props.triggerType || 'pressure';
+            const vType = props.visualType || 'button';
             const lCh = props.listenChannel ? `\nListen: ${props.listenChannel}` : '';
-            this.selectedEntityText.setText(`Selected: ${name}\nChannel: ${ch}\nMode: ${tType} (${vType})${lCh}`);
+            const glow = props.glowColor ? `\nGlow: ${props.glowColor}` : '';
+            this.selectedEntityText.setText(`Selected: ${name}\nChannel: ${ch}\nMode: ${tType} (${vType})${lCh}${glow}`);
             this.selectedEntityText.setColor('#ff5555');
             this.editPropsButton.setVisible(true);
         } else if (ent.type === 'gate') {
             const lCh = props.listenChannel || '1';
             this.selectedEntityText.setText(`Selected: ${name}\nListen Ch: ${lCh}`);
             this.selectedEntityText.setColor('#ffaa00');
+            this.editPropsButton.setVisible(true);
+        } else if (ent.type === 'sign') {
+            const txt = props.text !== undefined ? props.text : "Hello!";
+            this.selectedEntityText.setText(`Selected: ${name}\nText: "${txt}"`);
+            this.selectedEntityText.setColor('#e2a76f');
+            this.editPropsButton.setVisible(true);
+        } else if (ent.type === 'movingPlatform') {
+            const ch = props.channel || '1';
+            const endX = props.endX !== undefined ? props.endX : ent.x;
+            const endY = props.endY !== undefined ? props.endY : ent.y;
+            const vel = props.velocity || 60;
+            const glow = props.glowColor || '0x44aaff';
+            this.selectedEntityText.setText(`Selected: ${name}\nCh: ${ch} | End: ${endX},${endY}\nVel: ${vel} | Glow: ${glow}`);
+            this.selectedEntityText.setColor('#44aaff');
             this.editPropsButton.setVisible(true);
         } else {
             this.selectedEntityText.setText(`Selected: ${name}\n(No editable properties)`);
@@ -855,42 +980,303 @@ export class EditorScene extends Phaser.Scene {
         const ent = this.selectedEntity;
         const props = ent.properties || {};
 
-        if (ent.type === 'button') {
-            const ch = prompt("Enter Output Trigger Channel (e.g. 1, gate_a):", String(props.channel || "1"));
-            if (ch === null) return;
+        const useNativePrompts = !!navigator.webdriver;
 
-            const tType = prompt("Enter Trigger Type (interact or pressure):", String(props.triggerType || "interact"));
-            if (tType === null) return;
+        if (useNativePrompts) {
+            // FALLBACK FOR AUTOMATED TEST INTERFACE (Headless Puppeteer)
+            if (ent.type === 'button') {
+                const ch = prompt("Enter Output Trigger Channel (e.g. 1, gate_a):", String(props.channel || "1"));
+                if (ch === null) return;
 
-            const vType = prompt("Enter Visual Type (button or lever):", String(props.visualType || "lever"));
-            if (vType === null) return;
+                const tType = prompt("Enter Trigger Type (interact or pressure):", String(props.triggerType || "pressure"));
+                if (tType === null) return;
 
-            const lCh = prompt("Enter optional Listen Channel (e.g. gravity_flip, or leave empty):", String(props.listenChannel || ""));
-            if (lCh === null) return;
+                const vType = prompt("Enter Visual Type (button or lever):", String(props.visualType || "button"));
+                if (vType === null) return;
 
-            ent.properties = {
-                channel: ch.trim() || "1",
-                triggerType: tType.trim() === "pressure" ? "pressure" : "interact",
-                visualType: vType.trim() === "button" ? "button" : "lever",
-                listenChannel: lCh.trim() ? lCh.trim() : undefined
-            };
+                const lCh = prompt("Enter optional Listen Channel (e.g. gravity_flip, or leave empty):", String(props.listenChannel || ""));
+                if (lCh === null) return;
 
-            this.sound.play('sfx_checkpoint', { volume: 0.3 });
-            this.updateSelectedEntityUI();
-            this.createWorkspaceTilemap(); // Refresh visually
-        } else if (ent.type === 'gate') {
-            const lCh = prompt("Enter Listen Channel (e.g. 1, gate_a):", String(props.listenChannel || "1"));
-            if (lCh === null) return;
+                const glowColor = prompt("Enter Glow Color (hex, e.g. 0xff5500, or leave empty):", String(props.glowColor || ""));
+                if (glowColor === null) return;
 
-            ent.properties = {
-                listenChannel: lCh.trim() || "1"
-            };
+                ent.properties = {
+                    channel: ch.trim() || "1",
+                    triggerType: tType.trim() === "interact" ? "interact" : "pressure",
+                    visualType: vType.trim() === "lever" ? "lever" : "button",
+                    listenChannel: lCh.trim() ? lCh.trim() : undefined,
+                    glowColor: glowColor.trim() ? glowColor.trim() : undefined
+                };
 
-            this.sound.play('sfx_checkpoint', { volume: 0.3 });
-            this.updateSelectedEntityUI();
-            this.createWorkspaceTilemap(); // Refresh visually
+                this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                this.updateSelectedEntityUI();
+                this.createWorkspaceTilemap();
+            } else if (ent.type === 'gate') {
+                const lCh = prompt("Enter Listen Channel (e.g. 1, gate_a):", String(props.listenChannel || "1"));
+                if (lCh === null) return;
+
+                ent.properties = {
+                    listenChannel: lCh.trim() || "1"
+                };
+
+                this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                this.updateSelectedEntityUI();
+                this.createWorkspaceTilemap();
+            } else if (ent.type === 'sign') {
+                const txt = prompt("Enter Sign Text:", String(props.text !== undefined ? props.text : "Hello!"));
+                if (txt === null) return;
+
+                ent.properties = {
+                    text: txt.trim()
+                };
+
+                this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                this.updateSelectedEntityUI();
+                this.createWorkspaceTilemap();
+            } else if (ent.type === 'movingPlatform') {
+                const endX = prompt("Enter End Tile X:", String(props.endX !== undefined ? props.endX : ent.x));
+                if (endX === null) return;
+                const endY = prompt("Enter End Tile Y:", String(props.endY !== undefined ? props.endY : ent.y));
+                if (endY === null) return;
+                const velocity = prompt("Enter Velocity (px/s):", String(props.velocity || 60));
+                if (velocity === null) return;
+                const channel = prompt("Enter Channel:", String(props.channel || "1"));
+                if (channel === null) return;
+                const tileGid = prompt("Enter Tile GID (visual tile index):", String(props.tileGid !== undefined ? props.tileGid : 0));
+                if (tileGid === null) return;
+                const extraTiles = prompt("Enter Extra Tile Offsets (e.g. '1,0 2,0' for 3-wide, or leave empty):", String(props.extraTiles || ""));
+                if (extraTiles === null) return;
+                const glowColor = prompt("Enter Glow Color (hex, e.g. 0x44aaff):", String(props.glowColor || "0x44aaff"));
+                if (glowColor === null) return;
+
+                ent.properties = {
+                    endX: parseInt(endX.trim()) || ent.x,
+                    endY: parseInt(endY.trim()) || ent.y,
+                    velocity: parseInt(velocity.trim()) || 60,
+                    channel: channel.trim() || "1",
+                    tileGid: parseInt(tileGid.trim()) || 0,
+                    extraTiles: extraTiles.trim() || undefined,
+                    glowColor: glowColor.trim() || "0x44aaff"
+                };
+
+                this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                this.updateSelectedEntityUI();
+                this.createWorkspaceTilemap();
+            }
+        } else {
+            // UNIFIED FORM SYSTEM FOR REAL PLAYERS
+            if (ent.type === 'button') {
+                this.showPropertyForm("Button / Lever Properties", [
+                    { key: 'channel', label: 'Output Trigger Channel', type: 'text', value: String(props.channel || "1") },
+                    { key: 'triggerType', label: 'Trigger Type', type: 'select', options: ['pressure', 'interact'], value: String(props.triggerType || "pressure") },
+                    { key: 'visualType', label: 'Visual Type', type: 'select', options: ['button', 'lever'], value: String(props.visualType || "button") },
+                    { key: 'listenChannel', label: 'Listen Channel (Optional)', type: 'text', value: String(props.listenChannel || "") },
+                    { key: 'glowColor', label: 'Glow Color (hex, e.g. 0xff5500, or leave empty)', type: 'text', value: String(props.glowColor || "") }
+                ], (values) => {
+                    ent.properties = {
+                        channel: values.channel.trim() || "1",
+                        triggerType: values.triggerType as 'interact' | 'pressure',
+                        visualType: values.visualType as 'button' | 'lever',
+                        listenChannel: values.listenChannel.trim() ? values.listenChannel.trim() : undefined,
+                        glowColor: values.glowColor.trim() ? values.glowColor.trim() : undefined
+                    };
+                    this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                    this.updateSelectedEntityUI();
+                    this.createWorkspaceTilemap();
+                });
+            } else if (ent.type === 'gate') {
+                this.showPropertyForm("Gate Properties", [
+                    { key: 'listenChannel', label: 'Listen Channel', type: 'text', value: String(props.listenChannel || "1") }
+                ], (values) => {
+                    ent.properties = {
+                        listenChannel: values.listenChannel.trim() || "1"
+                    };
+                    this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                    this.updateSelectedEntityUI();
+                    this.createWorkspaceTilemap();
+                });
+            } else if (ent.type === 'sign') {
+                this.showPropertyForm("Sign Properties", [
+                    { key: 'text', label: 'Sign Text', type: 'text', value: String(props.text !== undefined ? props.text : "Hello!") }
+                ], (values) => {
+                    ent.properties = {
+                        text: values.text.trim()
+                    };
+                    this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                    this.updateSelectedEntityUI();
+                    this.createWorkspaceTilemap();
+                });
+            } else if (ent.type === 'movingPlatform') {
+                this.showPropertyForm("Moving Platform Properties", [
+                    { key: 'endX', label: 'End Tile X', type: 'text', value: String(props.endX !== undefined ? props.endX : ent.x) },
+                    { key: 'endY', label: 'End Tile Y', type: 'text', value: String(props.endY !== undefined ? props.endY : ent.y) },
+                    { key: 'velocity', label: 'Velocity (px/s)', type: 'text', value: String(props.velocity || "60") },
+                    { key: 'channel', label: 'Trigger Channel', type: 'text', value: String(props.channel || "1") },
+                    { key: 'tileGid', label: 'Tile GID (visual frame index)', type: 'text', value: String(props.tileGid !== undefined ? props.tileGid : "0") },
+                    { key: 'extraTiles', label: 'Extra Offsets (e.g. 1,0 2,0)', type: 'text', value: String(props.extraTiles || "") },
+                    { key: 'glowColor', label: 'Glow Color (hex, e.g. 0x44aaff)', type: 'text', value: String(props.glowColor || "0x44aaff") }
+                ], (values) => {
+                    ent.properties = {
+                        endX: parseInt(values.endX.trim()) || ent.x,
+                        endY: parseInt(values.endY.trim()) || ent.y,
+                        velocity: parseInt(values.velocity.trim()) || 60,
+                        channel: values.channel.trim() || "1",
+                        tileGid: parseInt(values.tileGid.trim()) || 0,
+                        extraTiles: values.extraTiles.trim() || undefined,
+                        glowColor: values.glowColor.trim() || "0x44aaff"
+                    };
+                    this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                    this.updateSelectedEntityUI();
+                    this.createWorkspaceTilemap();
+                });
+            }
         }
-     }
+    }
+
+    private showPropertyForm(
+        title: string,
+        fields: { key: string; label: string; type: 'text' | 'select'; options?: string[]; value: string }[],
+        callback: (values: Record<string, string>) => void
+    ): void {
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100vw';
+        overlay.style.height = '100vh';
+        overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.75)';
+        overlay.style.display = 'flex';
+        overlay.style.justifyContent = 'center';
+        overlay.style.alignItems = 'center';
+        overlay.style.zIndex = '99999';
+        overlay.style.fontFamily = "'Outfit', 'Inter', sans-serif";
+
+        const container = document.createElement('div');
+        container.style.backgroundColor = '#1e1e24';
+        container.style.border = '2px solid #44aaff';
+        container.style.borderRadius = '12px';
+        container.style.padding = '24px';
+        container.style.width = '360px';
+        container.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.6)';
+        container.style.color = '#ffffff';
+
+        const titleEl = document.createElement('h3');
+        titleEl.innerText = title;
+        titleEl.style.margin = '0 0 16px 0';
+        titleEl.style.color = '#44aaff';
+        titleEl.style.fontSize = '20px';
+        titleEl.style.textAlign = 'center';
+        titleEl.style.fontWeight = 'bold';
+        container.appendChild(titleEl);
+
+        const form = document.createElement('form');
+        const inputs: Record<string, HTMLInputElement | HTMLSelectElement> = {};
+
+        fields.forEach(field => {
+            const fieldWrapper = document.createElement('div');
+            fieldWrapper.style.marginBottom = '12px';
+            fieldWrapper.style.display = 'flex';
+            fieldWrapper.style.flexDirection = 'column';
+
+            const labelEl = document.createElement('label');
+            labelEl.innerText = field.label;
+            labelEl.style.marginBottom = '4px';
+            labelEl.style.fontSize = '12px';
+            labelEl.style.color = '#aaaaaa';
+            fieldWrapper.appendChild(labelEl);
+
+            if (field.type === 'select') {
+                const selectEl = document.createElement('select');
+                selectEl.style.padding = '8px';
+                selectEl.style.borderRadius = '6px';
+                selectEl.style.border = '1px solid #444444';
+                selectEl.style.backgroundColor = '#2d2d35';
+                selectEl.style.color = '#ffffff';
+                selectEl.style.outline = 'none';
+                selectEl.style.fontSize = '14px';
+
+                (field.options || []).forEach(opt => {
+                    const optEl = document.createElement('option');
+                    optEl.value = opt;
+                    optEl.text = opt;
+                    if (opt === field.value) {
+                        optEl.selected = true;
+                    }
+                    selectEl.appendChild(optEl);
+                });
+                fieldWrapper.appendChild(selectEl);
+                inputs[field.key] = selectEl;
+            } else {
+                const inputEl = document.createElement('input');
+                inputEl.type = 'text';
+                inputEl.value = field.value;
+                inputEl.style.padding = '8px';
+                inputEl.style.borderRadius = '6px';
+                inputEl.style.border = '1px solid #444444';
+                inputEl.style.backgroundColor = '#2d2d35';
+                inputEl.style.color = '#ffffff';
+                inputEl.style.outline = 'none';
+                inputEl.style.fontSize = '14px';
+                fieldWrapper.appendChild(inputEl);
+                inputs[field.key] = inputEl;
+            }
+
+            form.appendChild(fieldWrapper);
+        });
+
+        const btnWrapper = document.createElement('div');
+        btnWrapper.style.display = 'flex';
+        btnWrapper.style.justifyContent = 'space-between';
+        btnWrapper.style.marginTop = '20px';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.innerText = 'Cancel';
+        cancelBtn.style.padding = '8px 16px';
+        cancelBtn.style.borderRadius = '6px';
+        cancelBtn.style.border = '1px solid #555555';
+        cancelBtn.style.backgroundColor = 'transparent';
+        cancelBtn.style.color = '#cccccc';
+        cancelBtn.style.cursor = 'pointer';
+        cancelBtn.style.fontSize = '14px';
+        cancelBtn.style.transition = 'all 0.2s';
+        cancelBtn.onclick = () => {
+            document.body.removeChild(overlay);
+        };
+        btnWrapper.appendChild(cancelBtn);
+
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'submit';
+        saveBtn.innerText = 'Save';
+        saveBtn.style.padding = '8px 16px';
+        saveBtn.style.borderRadius = '6px';
+        saveBtn.style.border = 'none';
+        saveBtn.style.backgroundColor = '#44aaff';
+        saveBtn.style.color = '#ffffff';
+        saveBtn.style.cursor = 'pointer';
+        saveBtn.style.fontSize = '14px';
+        saveBtn.style.fontWeight = 'bold';
+        saveBtn.style.transition = 'all 0.2s';
+
+        form.onsubmit = (e) => {
+            e.preventDefault();
+            const res: Record<string, string> = {};
+            Object.keys(inputs).forEach(k => {
+                res[k] = inputs[k].value;
+            });
+            document.body.removeChild(overlay);
+            callback(res);
+        };
+
+        btnWrapper.appendChild(saveBtn);
+        form.appendChild(btnWrapper);
+        container.appendChild(form);
+        overlay.appendChild(container);
+        document.body.appendChild(overlay);
+
+        const firstInput = container.querySelector('input, select') as HTMLElement;
+        if (firstInput) firstInput.focus();
+    }
 
 
 
@@ -1130,5 +1516,390 @@ export class EditorScene extends Phaser.Scene {
         this.levelData.entities.forEach(ent => this.drawEntityVisual(ent));
 
         this.sound.play('sfx_checkpoint', { volume: 0.2 });
+    }
+
+    private getTileConfig(gid: number): { texture: string, frame: number, scale: number } {
+        if (gid >= 180) {
+            return {
+                texture: 'bg_tilemap_packed',
+                frame: gid - 180,
+                scale: 1.1
+            };
+        } else {
+            return {
+                texture: 'tilemap_packed',
+                frame: gid,
+                scale: 1.5
+            };
+        }
+    }
+
+    private loadTileTags(): void {
+        const defaultTags: Record<string, number[]> = {
+            background: Array.from({ length: 24 }, (_, i) => 180 + i)
+        };
+
+        try {
+            const data = localStorage.getItem('blu_tile_tags');
+            if (data) {
+                this.tileTags = JSON.parse(data);
+            } else {
+                this.tileTags = defaultTags;
+                this.saveTileTags();
+            }
+        } catch (e) {
+            console.error('Failed to load tile tags:', e);
+            this.tileTags = defaultTags;
+        }
+    }
+
+    private saveTileTags(): void {
+        try {
+            localStorage.setItem('blu_tile_tags', JSON.stringify(this.tileTags));
+        } catch (e) {
+            console.error('Failed to save tile tags:', e);
+        }
+    }
+
+    private getFilteredTiles(): { gid: number; texture: string; frame: number; scale: number }[] {
+        const allTiles: number[] = [];
+        for (let i = 180; i <= 203; i++) {
+            allTiles.push(i);
+        }
+        for (let i = 0; i <= 179; i++) {
+            allTiles.push(i);
+        }
+
+        const filter = this.activeTagFilter;
+        let filtered: number[] = allTiles;
+        if (filter !== 'all' && this.tileTags[filter]) {
+            const allowedGids = new Set(this.tileTags[filter]);
+            filtered = allTiles.filter(gid => allowedGids.has(gid));
+        }
+
+        return filtered.map(gid => {
+            const config = this.getTileConfig(gid);
+            return {
+                gid,
+                texture: config.texture,
+                frame: config.frame,
+                scale: config.scale
+            };
+        });
+    }
+
+    private showTagManager(): void {
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100vw';
+        overlay.style.height = '100vh';
+        overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+        overlay.style.display = 'flex';
+        overlay.style.justifyContent = 'center';
+        overlay.style.alignItems = 'center';
+        overlay.style.zIndex = '99999';
+        overlay.style.fontFamily = "'Outfit', 'Inter', sans-serif";
+
+        const container = document.createElement('div');
+        container.style.backgroundColor = '#121216';
+        container.style.border = '2px solid #ffaa00';
+        container.style.borderRadius = '12px';
+        container.style.padding = '20px';
+        container.style.width = '800px';
+        container.style.height = '500px';
+        container.style.display = 'flex';
+        container.style.flexDirection = 'column';
+        container.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.6)';
+        container.style.color = '#ffffff';
+
+        const header = document.createElement('div');
+        header.style.display = 'flex';
+        header.style.justifyContent = 'space-between';
+        header.style.alignItems = 'center';
+        header.style.borderBottom = '1px solid #22222b';
+        header.style.paddingBottom = '10px';
+
+        const titleEl = document.createElement('h3');
+        titleEl.innerText = '🏷️ TILE TAG MANAGER';
+        titleEl.style.margin = '0';
+        titleEl.style.color = '#ffaa00';
+        titleEl.style.fontSize = '20px';
+        titleEl.style.fontWeight = 'bold';
+        header.appendChild(titleEl);
+
+        const closeBtn = document.createElement('button');
+        closeBtn.innerText = '✕';
+        closeBtn.style.background = 'transparent';
+        closeBtn.style.border = 'none';
+        closeBtn.style.color = '#ffaa00';
+        closeBtn.style.fontSize = '24px';
+        closeBtn.style.cursor = 'pointer';
+        closeBtn.onclick = () => {
+            document.body.removeChild(overlay);
+            this.saveTileTags();
+            this.buildPaletteUI();
+        };
+        header.appendChild(closeBtn);
+        container.appendChild(header);
+
+        const body = document.createElement('div');
+        body.style.display = 'flex';
+        body.style.flex = '1';
+        body.style.minHeight = '0';
+        body.style.marginTop = '15px';
+        body.style.gap = '20px';
+
+        const leftPanel = document.createElement('div');
+        leftPanel.style.width = '250px';
+        leftPanel.style.display = 'flex';
+        leftPanel.style.flexDirection = 'column';
+        leftPanel.style.gap = '10px';
+        leftPanel.style.borderRight = '1px solid #22222b';
+        leftPanel.style.paddingRight = '15px';
+
+        const addForm = document.createElement('div');
+        addForm.style.display = 'flex';
+        addForm.style.gap = '5px';
+
+        const tagInput = document.createElement('input');
+        tagInput.type = 'text';
+        tagInput.placeholder = 'New tag name...';
+        tagInput.style.flex = '1';
+        tagInput.style.padding = '6px';
+        tagInput.style.borderRadius = '4px';
+        tagInput.style.border = '1px solid #444';
+        tagInput.style.backgroundColor = '#1e1e24';
+        tagInput.style.color = '#ffffff';
+        tagInput.style.fontSize = '12px';
+        tagInput.style.outline = 'none';
+
+        const addBtn = document.createElement('button');
+        addBtn.innerText = '+ ADD';
+        addBtn.style.padding = '6px 12px';
+        addBtn.style.backgroundColor = '#ffaa00';
+        addBtn.style.color = '#000000';
+        addBtn.style.border = 'none';
+        addBtn.style.borderRadius = '4px';
+        addBtn.style.fontWeight = 'bold';
+        addBtn.style.cursor = 'pointer';
+        addBtn.style.fontSize = '12px';
+
+        addForm.appendChild(tagInput);
+        addForm.appendChild(addBtn);
+        leftPanel.appendChild(addForm);
+
+        const tagsScroll = document.createElement('div');
+        tagsScroll.style.flex = '1';
+        tagsScroll.style.overflowY = 'auto';
+        tagsScroll.style.display = 'flex';
+        tagsScroll.style.flexDirection = 'column';
+        tagsScroll.style.gap = '5px';
+        leftPanel.appendChild(tagsScroll);
+
+        body.appendChild(leftPanel);
+
+        const rightPanel = document.createElement('div');
+        rightPanel.style.flex = '1';
+        rightPanel.style.display = 'flex';
+        rightPanel.style.flexDirection = 'column';
+        rightPanel.style.minHeight = '0';
+
+        const gridTitle = document.createElement('div');
+        gridTitle.style.fontSize = '14px';
+        gridTitle.style.color = '#888888';
+        gridTitle.style.marginBottom = '10px';
+        rightPanel.appendChild(gridTitle);
+
+        const gridScroll = document.createElement('div');
+        gridScroll.style.flex = '1';
+        gridScroll.style.overflowY = 'auto';
+        gridScroll.style.display = 'grid';
+        gridScroll.style.gridTemplateColumns = 'repeat(6, 1fr)';
+        gridScroll.style.gap = '10px';
+        gridScroll.style.paddingRight = '5px';
+        rightPanel.appendChild(gridScroll);
+
+        body.appendChild(rightPanel);
+        container.appendChild(body);
+
+        const footer = document.createElement('div');
+        footer.style.display = 'flex';
+        footer.style.justifyContent = 'flex-end';
+        footer.style.borderTop = '1px solid #22222b';
+        footer.style.paddingTop = '10px';
+        footer.style.marginTop = '15px';
+
+        const saveCloseBtn = document.createElement('button');
+        saveCloseBtn.innerText = 'CLOSE & APPLY';
+        saveCloseBtn.style.padding = '10px 20px';
+        saveCloseBtn.style.backgroundColor = '#ffaa00';
+        saveCloseBtn.style.color = '#000000';
+        saveCloseBtn.style.border = 'none';
+        saveCloseBtn.style.borderRadius = '6px';
+        saveCloseBtn.style.fontWeight = 'bold';
+        saveCloseBtn.style.cursor = 'pointer';
+        saveCloseBtn.style.fontSize = '14px';
+        saveCloseBtn.onclick = () => {
+            document.body.removeChild(overlay);
+            this.saveTileTags();
+            this.buildPaletteUI();
+        };
+        footer.appendChild(saveCloseBtn);
+        container.appendChild(footer);
+
+        overlay.appendChild(container);
+        document.body.appendChild(overlay);
+
+        let activeTag = Object.keys(this.tileTags)[0] || '';
+
+        const refreshTagList = () => {
+            tagsScroll.innerHTML = '';
+            Object.keys(this.tileTags).forEach(tag => {
+                const row = document.createElement('div');
+                row.style.display = 'flex';
+                row.style.justifyContent = 'space-between';
+                row.style.alignItems = 'center';
+                row.style.padding = '8px';
+                row.style.borderRadius = '6px';
+                row.style.backgroundColor = tag === activeTag ? '#2a2a35' : '#1e1e24';
+                row.style.border = tag === activeTag ? '1px solid #ffaa00' : '1px solid transparent';
+                row.style.cursor = 'pointer';
+
+                const nameSpan = document.createElement('span');
+                nameSpan.innerText = tag;
+                nameSpan.style.fontSize = '13px';
+                nameSpan.style.fontWeight = tag === activeTag ? 'bold' : 'normal';
+                nameSpan.style.color = tag === activeTag ? '#ffaa00' : '#ffffff';
+                row.appendChild(nameSpan);
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.innerText = '🗑️';
+                deleteBtn.style.background = 'transparent';
+                deleteBtn.style.border = 'none';
+                deleteBtn.style.color = '#ff4444';
+                deleteBtn.style.cursor = 'pointer';
+                deleteBtn.style.padding = '2px 5px';
+                deleteBtn.style.fontSize = '12px';
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    if (confirm(`Are you sure you want to delete the tag "${tag}"?`)) {
+                        delete this.tileTags[tag];
+                        if (activeTag === tag) {
+                            activeTag = Object.keys(this.tileTags)[0] || '';
+                            if (this.activeTagFilter === tag) {
+                                this.activeTagFilter = 'all';
+                            }
+                        }
+                        refreshTagList();
+                        refreshGrid();
+                    }
+                };
+                row.appendChild(deleteBtn);
+
+                row.onclick = () => {
+                    activeTag = tag;
+                    refreshTagList();
+                    refreshGrid();
+                };
+
+                tagsScroll.appendChild(row);
+            });
+        };
+
+        const refreshGrid = () => {
+            gridScroll.innerHTML = '';
+            if (!activeTag) {
+                gridTitle.innerText = 'No tags created. Add a tag first!';
+                return;
+            }
+            gridTitle.innerText = `Select tiles associated with tag: ${activeTag.toUpperCase()}`;
+
+            const taggedGids = this.tileTags[activeTag] || [];
+            const allTiles: number[] = [];
+            for (let i = 180; i <= 203; i++) allTiles.push(i);
+            for (let i = 0; i <= 179; i++) allTiles.push(i);
+
+            allTiles.forEach(gid => {
+                const isTagged = taggedGids.includes(gid);
+                
+                const cell = document.createElement('div');
+                cell.style.display = 'flex';
+                cell.style.flexDirection = 'column';
+                cell.style.alignItems = 'center';
+                cell.style.justifyContent = 'center';
+                cell.style.padding = '8px';
+                cell.style.borderRadius = '6px';
+                cell.style.backgroundColor = isTagged ? '#252530' : '#1e1e24';
+                cell.style.border = isTagged ? '1px solid #ffaa00' : '1px solid transparent';
+                cell.style.cursor = 'pointer';
+                cell.style.userSelect = 'none';
+
+                const col = gid >= 180 ? (gid - 180) % 8 : gid % 20;
+                const rowNum = gid >= 180 ? Math.floor((gid - 180) / 8) : Math.floor(gid / 20);
+                const bgSize = gid >= 180 ? '288px 108px' : '720px 324px';
+                const bgPos = `${-(col * 36)}px ${-(rowNum * 36)}px`;
+                const bgImg = gid >= 180 ? 'assets/backgrounds/tilemap-backgrounds_packed.png' : 'assets/tilesets/tilemap_packed.png';
+
+                const thumb = document.createElement('div');
+                thumb.style.width = '36px';
+                thumb.style.height = '36px';
+                thumb.style.backgroundImage = `url('${bgImg}')`;
+                thumb.style.backgroundSize = bgSize;
+                thumb.style.backgroundPosition = bgPos;
+                thumb.style.imageRendering = 'pixelated';
+                thumb.style.backgroundRepeat = 'no-repeat';
+                cell.appendChild(thumb);
+
+                const label = document.createElement('div');
+                label.innerText = `GID ${gid}`;
+                label.style.fontSize = '9px';
+                label.style.color = isTagged ? '#ffaa00' : '#888888';
+                label.style.marginTop = '4px';
+                cell.appendChild(label);
+
+                cell.onclick = () => {
+                    const idx = taggedGids.indexOf(gid);
+                    if (idx > -1) {
+                        taggedGids.splice(idx, 1);
+                    } else {
+                        taggedGids.push(gid);
+                    }
+                    this.tileTags[activeTag] = taggedGids;
+                    refreshGrid();
+                };
+
+                gridScroll.appendChild(cell);
+            });
+        };
+
+        addBtn.onclick = () => {
+            const name = tagInput.value.trim().toLowerCase();
+            if (!name) return;
+            if (name === 'all' || name === 'manage tags') {
+                alert('Invalid tag name.');
+                return;
+            }
+            if (this.tileTags[name]) {
+                alert('Tag already exists.');
+                return;
+            }
+            this.tileTags[name] = [];
+            activeTag = name;
+            tagInput.value = '';
+            refreshTagList();
+            refreshGrid();
+        };
+
+        tagInput.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addBtn.click();
+            }
+        };
+
+        refreshTagList();
+        refreshGrid();
     }
 }

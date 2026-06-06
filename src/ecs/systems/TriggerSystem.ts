@@ -1,5 +1,5 @@
 import { EntityManager, Entity } from '../Entity';
-import { TriggerComponent, TriggerableComponent, PhysicsBodyComponent, RenderComponent, TransformComponent, PlayerComponent } from '../components';
+import { TriggerComponent, TriggerableComponent, PhysicsBodyComponent, RenderComponent, TransformComponent, PlayerComponent, MovingPlatformComponent } from '../components';
 import { InputManager, Action } from '../../input/InputManager';
 
 export class TriggerSystem {
@@ -24,7 +24,35 @@ export class TriggerSystem {
 
             const prevActive = trigger.isActive;
 
-            if (trigger.triggerType === 'pressure') {
+            if (trigger.visualType === 'button') {
+                // Button: active ONLY when a player or a cat is overlapping
+                let isPressed = false;
+                for (const physEnt of physicsEntities) {
+                    if (physEnt.id === triggerEnt.id) continue;
+
+                    const isPlayerOrCat = physEnt.hasComponent('Player') || physEnt.hasComponent('Cat');
+                    if (!isPlayerOrCat) continue;
+
+                    const body = physEnt.getComponent<PhysicsBodyComponent>('PhysicsBody')!.body;
+                    const entBox = {
+                        x: body.x,
+                        y: body.y,
+                        w: body.width,
+                        h: body.height
+                    };
+
+                    if (
+                        entBox.x < triggerBox.x + triggerBox.w &&
+                        entBox.x + entBox.w > triggerBox.x &&
+                        entBox.y < triggerBox.y + triggerBox.h &&
+                        entBox.y + entBox.h > triggerBox.y
+                    ) {
+                        isPressed = true;
+                        break;
+                    }
+                }
+                trigger.isActive = isPressed;
+            } else if (trigger.triggerType === 'pressure') {
                 // Pressure plates: check if any player or crate overlaps
                 let isPressed = false;
                 for (const physEnt of physicsEntities) {
@@ -89,9 +117,40 @@ export class TriggerSystem {
 
             // Sync visual representation of trigger
             if (sprite && typeof sprite.setFrame === 'function') {
-                const idle = render.idleFrame !== undefined ? render.idleFrame : (trigger.visualType === 'lever' ? 127 : 107);
-                const active = render.activeFrame !== undefined ? render.activeFrame : (trigger.visualType === 'lever' ? 128 : 108);
+                const idle = render.idleFrame !== undefined ? render.idleFrame : (trigger.visualType === 'lever' ? 64 : 148);
+                const active = render.activeFrame !== undefined ? render.activeFrame : (trigger.visualType === 'lever' ? 66 : 149);
                 sprite.setFrame(trigger.isActive ? active : idle);
+            }
+
+            // Render glow effect under trigger tiles if glowColor is set
+            if (trigger.glowColor !== undefined) {
+                if (!trigger.glowGraphics) {
+                    trigger.glowGraphics = sprite.scene.add.graphics();
+                    trigger.glowGraphics.setDepth(3); // below players and triggers
+                    const uiCamera = sprite.scene.cameras.getCamera('uiCamera') || (sprite.scene as any).uiCamera;
+                    if (uiCamera) uiCamera.ignore(trigger.glowGraphics);
+                }
+
+                const g = trigger.glowGraphics;
+                g.clear();
+
+                const color = trigger.glowColor;
+                // Draw a soft glow beneath the button/lever
+                // Center glow - bottom strip
+                g.fillStyle(color, 0.5);
+                g.fillRect(transform.x - 9, transform.y + 9 - 2, 18, 3);
+
+                // Wider, dimmer glow below
+                g.fillStyle(color, 0.2);
+                g.fillRect(transform.x - 11, transform.y + 9 + 1, 22, 3);
+
+                // Cast onto left neighbor
+                g.fillStyle(color, 0.15);
+                g.fillRect(transform.x - 9 - 18, transform.y + 9 - 1, 18, 2);
+
+                // Cast onto right neighbor
+                g.fillStyle(color, 0.15);
+                g.fillRect(transform.x + 9, transform.y + 9 - 1, 18, 2);
             }
 
             // Propagate if state changed
@@ -115,8 +174,8 @@ export class TriggerSystem {
                     const render = ent.getComponent<RenderComponent>('Render')!;
                     const sprite = render?.gameObject as Phaser.GameObjects.Sprite;
                     if (sprite && typeof sprite.setFrame === 'function') {
-                        const idle = render.idleFrame !== undefined ? render.idleFrame : (trigger.visualType === 'lever' ? 127 : 107);
-                        const active = render.activeFrame !== undefined ? render.activeFrame : (trigger.visualType === 'lever' ? 128 : 108);
+                        const idle = render.idleFrame !== undefined ? render.idleFrame : (trigger.visualType === 'lever' ? 64 : 148);
+                        const active = render.activeFrame !== undefined ? render.activeFrame : (trigger.visualType === 'lever' ? 66 : 149);
                         sprite.setFrame(trigger.isActive ? active : idle);
                         // Flip visual vertical orientation on gravity flip channel
                         if (channel === 'gravity_flip') {
@@ -139,6 +198,15 @@ export class TriggerSystem {
                 if (prev !== isActive) {
                     this.applyTriggerState(ent, isActive);
                 }
+            }
+        }
+
+        // 3. Let moving platforms react
+        const platforms = entityManager.query('MovingPlatform');
+        for (const ent of platforms) {
+            const plat = ent.getComponent<MovingPlatformComponent>('MovingPlatform')!;
+            if (plat.channel === channel) {
+                plat.channelState = isActive;
             }
         }
     }
@@ -175,6 +243,13 @@ export class TriggerSystem {
             const isActive = this.channelStates.get(target.listenChannel) || false;
             target.state = isActive;
             this.applyTriggerState(ent, isActive);
+        }
+
+        // Sync moving platforms
+        const platforms = entityManager.query('MovingPlatform');
+        for (const ent of platforms) {
+            const plat = ent.getComponent<MovingPlatformComponent>('MovingPlatform')!;
+            plat.channelState = this.channelStates.get(plat.channel) || false;
         }
     }
 }

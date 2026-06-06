@@ -1,7 +1,9 @@
-import { EntityManager } from '../Entity';
-import { PlayerComponent, PhysicsBodyComponent, TransformComponent, InteractableComponent, RenderComponent } from '../components';
+import { EntityManager, Entity } from '../Entity';
+import { PlayerComponent, PhysicsBodyComponent, TransformComponent, InteractableComponent, RenderComponent, KeyComponent } from '../components';
 import { InputManager, Action } from '../../input/InputManager';
 import { PHYSICS } from '../../constants';
+
+const DEATH_FADE_MS = 250;
 
 export class MovementSystem {
     update(entityManager: EntityManager, delta: number, inputManager: InputManager): void {
@@ -20,16 +22,23 @@ export class MovementSystem {
             const body = physics.body;
             const pi = player.playerIndex;
 
+            // 0. Skip input while dying (fade tween is in progress)
+            if (player.isDying) continue;
+
+            // Out-of-bounds death trigger
+            if (body.y > body.world.bounds.height) {
+                this.triggerDeath(entity, player, body);
+                continue;
+            }
+
             const config = player.playerType === 'human' ? PHYSICS.human : PHYSICS.dog;
 
             // 1. Ladder Overlap Check (Only for Human)
             let overlapsLadder = false;
+            let currentLadderTopY = Infinity;
             if (player.playerType === 'human') {
                 const playerBox = {
-                    x: body.x,
-                    y: body.y,
-                    w: body.width,
-                    h: body.height
+                    x: body.x, y: body.y, w: body.width, h: body.height
                 };
 
                 for (const ladder of ladders) {
@@ -41,7 +50,9 @@ export class MovementSystem {
                         playerBox.y + playerBox.h > transform.y
                     ) {
                         overlapsLadder = true;
-                        break;
+                        // Track the topmost edge of all overlapping ladder tiles
+                        const ladderTop = transform.y - transform.height / 2;
+                        if (ladderTop < currentLadderTopY) currentLadderTopY = ladderTop;
                     }
                 }
             }
@@ -75,9 +86,17 @@ export class MovementSystem {
                     body.setVelocityX(0);
                 }
 
-                // Vertical climbing controls
+                // Vertical climbing controls with top-clamp
                 if (inputManager.isDown(pi, Action.MOVE_UP)) {
-                    body.setVelocityY(-config.moveSpeed * 0.7);
+                    if (body.y <= currentLadderTopY) {
+                        // Reached the top of the ladder — exit climbing, snap to top
+                        body.setVelocityY(0);
+                        player.isClimbing = false;
+                        body.allowGravity = true;
+                        body.y = currentLadderTopY;
+                    } else {
+                        body.setVelocityY(-config.moveSpeed * 0.7);
+                    }
                 } else if (inputManager.isDown(pi, Action.MOVE_DOWN)) {
                     body.setVelocityY(config.moveSpeed * 0.7);
                 } else {
@@ -123,113 +142,118 @@ export class MovementSystem {
             if (player.playerType === 'dog') {
                 const render = entity.getComponent<RenderComponent>('Render')!;
                 const sprite = render.gameObject as Phaser.GameObjects.Sprite;
-                
+
                 // Initialize idleTime if not present
-                if (player.idleTime === undefined) {
-                    player.idleTime = 0;
-                }
+                if (player.idleTime === undefined) player.idleTime = 0;
+
+                // Check if dog is near a key (KeySystem handles actual pickup, but we block bark SFX/shockwave)
+                const keyEntities = entityManager.query('Key');
+                const nearKey = keyEntities.some(keyEnt => {
+                    const keyComp = keyEnt.getComponent<KeyComponent>('Key')!;
+                    return !keyComp.isPickedUp && keyComp.mouthSprite === undefined;
+                    // KeySystem detects proximity; if KeySystem already handled pickup on this frame we skip shockwave
+                });
 
                 // Handle Bark trigger
                 if (inputManager.isJustDown(pi, Action.BARK)) {
-                    const scene = sprite.scene;
-                    scene.sound.play('sfx_bark', { volume: 0.4 });
-
-                    sprite.play('blu_bark', true);
-                    player.isBarking = true;
-                    player.idleTime = 0;
-
-                    const shockwave = scene.add.graphics();
-                    shockwave.setDepth(15);
-
-                    const targetObj = { r: 2, alpha: 1 };
-                    scene.tweens.add({
-                        targets: targetObj,
-                        r: 36,
-                        alpha: 0,
-                        duration: 400,
-                        onUpdate: () => {
-                            // Compute dynamic position and orientation to stay locked to the dog
-                            const currentStartX = sprite.flipX ? (body.x + body.width + 2) : (body.x - 2);
-                            const currentStartY = body.y + body.height / 2;
-                            const currentCenterAngle = sprite.flipX ? 0 : Math.PI;
-
-                            shockwave.clear();
-                            // Use square root of alpha to keep particles more opaque longer
-                            const drawAlpha = Math.sqrt(targetObj.alpha);
-                            shockwave.fillStyle(0xffffff, drawAlpha);
-                            const baseAngles = [-Math.PI / 3, -Math.PI / 6, 0, Math.PI / 6, Math.PI / 3];
-                            const size = 4;
-                            for (const relAngle of baseAngles) {
-                                const angle = currentCenterAngle + relAngle;
-                                const px1 = Math.round(currentStartX + Math.cos(angle) * targetObj.r);
-                                const py1 = Math.round(currentStartY + Math.sin(angle) * targetObj.r);
-                                shockwave.fillRect(px1 - size / 2, py1 - size / 2, size, size);
-
-                                if (targetObj.r > 10) {
-                                    const px2 = Math.round(currentStartX + Math.cos(angle) * (targetObj.r - 8));
-                                    const py2 = Math.round(currentStartY + Math.sin(angle) * (targetObj.r - 8));
-                                    shockwave.fillRect(px2 - size / 2, py2 - size / 2, size, size);
-                                }
-
-                                if (targetObj.r > 18) {
-                                    const px3 = Math.round(currentStartX + Math.cos(angle) * (targetObj.r - 16));
-                                    const py3 = Math.round(currentStartY + Math.sin(angle) * (targetObj.r - 16));
-                                    shockwave.fillRect(px3 - size / 2, py3 - size / 2, size, size);
-                                }
-                            }
-                        },
-                        onComplete: () => {
-                            shockwave.destroy();
-                        }
+                    // Check if KeySystem is handling a key pickup this frame (any key nearby)
+                    const allKeyEnts = entityManager.query('Key');
+                    const keyPickingUp = allKeyEnts.some(ke => {
+                        const kc = ke.getComponent<KeyComponent>('Key')!;
+                        return kc.isPickedUp && kc.mouthSprite;
                     });
+                    // Only do bark shockwave / sound if not picking up a key
+                    if (!keyPickingUp) {
+                        const scene = sprite.scene;
+                        const barkIndex = Phaser.Math.Between(1, 7);
+                        scene.sound.play(`sfx_bark_${barkIndex}`, { volume: 0.4 });
+
+                        sprite.play('blu_bark', true);
+                        player.isBarking = true;
+                        player.idleTime = 0;
+
+                        const shockwave = scene.add.graphics();
+                        shockwave.setDepth(15);
+
+                        const targetObj = { r: 2, alpha: 1 };
+                        scene.tweens.add({
+                            targets: targetObj,
+                            r: 36,
+                            alpha: 0,
+                            duration: 200,
+                            onUpdate: () => {
+                                const currentStartX = sprite.flipX ? (body.x + body.width + 2) : (body.x - 2);
+                                const currentStartY = body.y + body.height / 2;
+                                const currentCenterAngle = sprite.flipX ? 0 : Math.PI;
+
+                                shockwave.clear();
+                                const drawAlpha = Math.sqrt(targetObj.alpha);
+                                shockwave.fillStyle(0xffffff, drawAlpha);
+                                const baseAngles = [-Math.PI / 3, -Math.PI / 6, 0, Math.PI / 6, Math.PI / 3];
+                                const size = 4;
+                                for (const relAngle of baseAngles) {
+                                    const angle = currentCenterAngle + relAngle;
+                                    const px1 = Math.round(currentStartX + Math.cos(angle) * targetObj.r);
+                                    const py1 = Math.round(currentStartY + Math.sin(angle) * targetObj.r);
+                                    shockwave.fillRect(px1 - size / 2, py1 - size / 2, size, size);
+
+                                    if (targetObj.r > 10) {
+                                        const px2 = Math.round(currentStartX + Math.cos(angle) * (targetObj.r - 8));
+                                        const py2 = Math.round(currentStartY + Math.sin(angle) * (targetObj.r - 8));
+                                        shockwave.fillRect(px2 - size / 2, py2 - size / 2, size, size);
+                                    }
+
+                                    if (targetObj.r > 18) {
+                                        const px3 = Math.round(currentStartX + Math.cos(angle) * (targetObj.r - 16));
+                                        const py3 = Math.round(currentStartY + Math.sin(angle) * (targetObj.r - 16));
+                                        shockwave.fillRect(px3 - size / 2, py3 - size / 2, size, size);
+                                    }
+                                }
+                            },
+                            onComplete: () => {
+                                shockwave.destroy();
+                            }
+                        });
+                    }
                 }
 
                 // If currently barking, wait for animation to complete or motion to interrupt
                 const speedX = Math.abs(body.velocity.x);
                 if (player.isBarking) {
-                    // Interrupt if moving or jumping
                     if (speedX > 0.1 || !body.blocked.down) {
                         player.isBarking = false;
                     } else if (sprite.anims.currentAnim?.key === 'blu_bark' && sprite.anims.isPlaying) {
-                        // Let the bark animation finish playing
                         player.idleTime = 0;
                     } else {
-                        // Completed bark
                         player.isBarking = false;
                     }
                 }
 
                 if (!player.isBarking) {
                     if (speedX > 0.1 && body.blocked.down) {
-                        // Walking on the ground
                         player.idleTime = 0;
                         sprite.play('blu_walk', true);
                         if (body.velocity.x > 0.1) {
-                            sprite.setFlipX(true); // face right
+                            sprite.setFlipX(true);
                         } else if (body.velocity.x < -0.1) {
-                            sprite.setFlipX(false); // face left
+                            sprite.setFlipX(false);
                         }
                     } else if (player.isClimbing) {
-                        // On ladder (no idle timer accumulation)
                         player.idleTime = 0;
                         sprite.play('blu_idle', true);
                     } else if (!body.blocked.down) {
-                        // In air (use sitting animation while jumping/falling, even if moving horizontally)
                         player.idleTime = 0;
                         sprite.play('blu_sit', true);
-                        
-                        // Still mirror direction in mid-air if moving horizontally
+
                         if (speedX > 0.1) {
                             if (body.velocity.x > 0.1) {
-                                sprite.setFlipX(true); // face right
+                                sprite.setFlipX(true);
                             } else if (body.velocity.x < -0.1) {
-                                sprite.setFlipX(false); // face left
+                                sprite.setFlipX(false);
                             }
                         }
                     } else {
-                        // Standing still on ground: accumulate idle timer (convert delta ms to seconds)
                         player.idleTime += delta / 1000;
-
                         if (player.idleTime < 4) {
                             sprite.play('blu_idle', true);
                         } else {
@@ -240,5 +264,62 @@ export class MovementSystem {
             }
         }
     }
-}
 
+    /**
+     * Freeze the player, fade them out over DEATH_FADE_MS, then respawn.
+     * Dog deaths play sfx_grumble; all deaths play sfx_death.
+     */
+    triggerDeath(entity: Entity, player: PlayerComponent, body: Phaser.Physics.Arcade.Body): void {
+        if (player.isDying) return;
+        player.isDying = true;
+
+        // Freeze physics
+        body.setVelocity(0, 0);
+        body.allowGravity = false;
+
+        const scene = body.gameObject?.scene;
+        if (!scene) {
+            // No scene — instant respawn fallback
+            this.doRespawn(player, body);
+            return;
+        }
+
+        // Play death SFX
+        scene.sound.play('sfx_death', { volume: 0.5 });
+        if (player.playerType === 'dog') {
+            scene.sound.play('sfx_grumble', { volume: 0.6 });
+        }
+
+        // Get the visual game object to tween its alpha
+        const render = entity.getComponent<RenderComponent>('Render');
+        const gameObj = render?.gameObject as Phaser.GameObjects.Components.Alpha & Phaser.GameObjects.GameObject | undefined;
+
+        if (gameObj && typeof (gameObj as any).setAlpha === 'function') {
+            const go = gameObj as any;
+            go.setAlpha(1);
+            scene.tweens.add({
+                targets: go,
+                alpha: 0,
+                duration: DEATH_FADE_MS,
+                ease: 'Linear',
+                onComplete: () => {
+                    go.setAlpha(1);
+                    this.doRespawn(player, body);
+                }
+            });
+        } else {
+            // Fallback: just delay and respawn
+            scene.time.delayedCall(DEATH_FADE_MS, () => {
+                this.doRespawn(player, body);
+            });
+        }
+    }
+
+    private doRespawn(player: PlayerComponent, body: Phaser.Physics.Arcade.Body): void {
+        body.reset(player.spawnX, player.spawnY);
+        player.isClimbing = false;
+        body.allowGravity = true;
+        body.setVelocity(0, 0);
+        player.isDying = false;
+    }
+}

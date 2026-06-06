@@ -65,6 +65,14 @@ export class PreloadScene extends Phaser.Scene {
             this.load.audio(key, placeholderAudio);
         }
 
+        // Load the 7 custom barks
+        for (let i = 1; i <= 7; i++) {
+            this.load.audio(`sfx_bark_${i}`, `assets/audio/sfx/barks/bark ${i}.mp3`);
+        }
+
+        // Load dog death grumble SFX
+        this.load.audio('sfx_grumble', 'assets/audio/sfx/grumble.mp3');
+
         // ── Level data ──
         // Load the single placeholder level JSON
         this.load.json('test_level', 'assets/levels/test_level.json');
