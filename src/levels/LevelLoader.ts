@@ -1,9 +1,20 @@
 import Phaser from 'phaser';
-import { TILE_SIZE, BG_TILE_SIZE } from '../constants';
-import { LevelData } from './LevelSchema';
+import { TILE_SIZE, BG_TILE_SIZE, VISUAL_FAMILIES } from '../constants';
+import { LevelData, EntityData } from './LevelSchema';
 import { EntityManager, Entity } from '../ecs/Entity';
 import { createPlayerEntity } from '../entities/PlayerFactory';
-import { RenderComponent } from '../ecs/components';
+import {
+    TransformComponent,
+    RenderComponent,
+    PhysicsBodyComponent,
+    CarryableComponent,
+    InteractableComponent,
+    CheckpointComponent,
+    ExitDoorComponent,
+    TriggerComponent,
+    TriggerableComponent,
+    LauncherComponent
+} from '../ecs/components';
 
 export class LevelLoader {
     /**
@@ -33,6 +44,8 @@ export class LevelLoader {
         const levelWidthPx = levelData.meta.width * TILE_SIZE;
         const levelHeightPx = levelData.meta.height * TILE_SIZE;
 
+        scene.cameras.main.setBackgroundColor('#1a1a2e');
+
         // 2. Create background
         this.createBackground(scene, levelData.meta.width, levelData.meta.height);
 
@@ -49,14 +62,23 @@ export class LevelLoader {
             'tilemap_packed',
             TILE_SIZE, TILE_SIZE,
             0, 0,
+            0 // GID starts at 0
         );
 
-        if (!tileset) {
+        const bgTileset = map.addTilesetImage(
+            'bg_tilemap_packed',
+            'bg_tilemap_packed',
+            BG_TILE_SIZE, BG_TILE_SIZE,
+            0, 0,
+            180 // GID starts at 180
+        );
+
+        if (!tileset || !bgTileset) {
             throw new Error('Failed to create tileset');
         }
 
-        // 4. Create layers and fill
-        const bgLayer = map.createBlankLayer('background', tileset, 0, 0);
+        // 4. Create layers and fill (bind both tilesets to background layer)
+        const bgLayer = map.createBlankLayer('background', [tileset, bgTileset], 0, 0);
         const terrainLayer = map.createBlankLayer('terrain', tileset, 0, 0);
         const fgLayer = map.createBlankLayer('foreground', tileset, 0, 0);
 
@@ -75,18 +97,259 @@ export class LevelLoader {
         // Enable Arcade physics collision on terrain layer tiles
         terrainLayer.setCollisionByExclusion([-1]);
 
-        // 5. Create players from spawn points
+        // 5. Create Physics Groups for clean collision handling
+        const cratesGroup = scene.physics.add.group();
+        const gatesGroup = scene.physics.add.group();
+        const launchersGroup = scene.physics.add.group();
+
+        // 6. Loop through entities and instantiate them
         let humanSpawn = { x: 3, y: 10 };
         let dogSpawn = { x: 20, y: 10 };
 
-        for (const entity of levelData.entities) {
-            if (entity.type === 'humanSpawn') {
-                humanSpawn = { x: entity.x, y: entity.y };
-            } else if (entity.type === 'dogSpawn') {
-                dogSpawn = { x: entity.x, y: entity.y };
+        for (const entData of levelData.entities) {
+            const entX = entData.x * TILE_SIZE + TILE_SIZE / 2;
+            const entY = entData.y * TILE_SIZE + TILE_SIZE / 2;
+
+            // Check if there is a background tile placed at the exact same grid coordinate to override the visual frame/texture
+            const bgIndex = entData.y * levelData.meta.width + entData.x;
+            const tileIndex = levelData.layers.background[bgIndex];
+            const hasBGOverride = tileIndex !== undefined && tileIndex >= 0;
+
+            let overrideIdleFrame: number | undefined;
+            let overrideActiveFrame: number | undefined;
+
+            if (hasBGOverride) {
+                // Remove from visual background layer map so it doesn't double-render or leave static duplicates if moved
+                bgLayer.removeTileAt(entData.x, entData.y);
+                
+                // Lookup visual family mapping
+                let family = VISUAL_FAMILIES[tileIndex];
+                if (!family) {
+                    // Search if tileIndex is active/inactive frame in any family
+                    const found = Object.values(VISUAL_FAMILIES).find(
+                        f => f.active === tileIndex || f.inactive === tileIndex
+                    );
+                    if (found) {
+                        family = found;
+                    }
+                }
+
+                if (family) {
+                    overrideIdleFrame = family.inactive;
+                    overrideActiveFrame = family.active;
+                } else {
+                    overrideIdleFrame = tileIndex;
+                    overrideActiveFrame = tileIndex;
+                }
+            }
+
+            const getFrame = (gid: number) => {
+                return gid >= 180 ? gid - 180 : gid;
+            };
+
+            // Helper to get overridden texture/frame or default values
+            const getVisual = (defaultFrame: number, defaultActiveFrame?: number) => {
+                if (hasBGOverride) {
+                    const localIdle = overrideIdleFrame !== undefined ? getFrame(overrideIdleFrame) : getFrame(tileIndex);
+                    const localActive = overrideActiveFrame !== undefined ? getFrame(overrideActiveFrame) : localIdle;
+                    return {
+                        texture: tileIndex >= 180 ? 'bg_tilemap_packed' : 'tilemap_packed',
+                        frame: localIdle,
+                        activeFrame: localActive
+                    };
+                }
+                return {
+                    texture: 'tilemap_packed',
+                    frame: getFrame(defaultFrame),
+                    activeFrame: defaultActiveFrame !== undefined ? getFrame(defaultActiveFrame) : getFrame(defaultFrame)
+                };
+            };
+
+            if (entData.type === 'humanSpawn') {
+                humanSpawn = { x: entData.x, y: entData.y };
+            } else if (entData.type === 'dogSpawn') {
+                dogSpawn = { x: entData.x, y: entData.y };
+            } else if (entData.type === 'crate') {
+                const visual = getVisual(143);
+                const sprite = scene.physics.add.sprite(entX, entY, visual.texture, visual.frame);
+                sprite.setDepth(8);
+                sprite.setDragX(1000);
+                cratesGroup.add(sprite);
+
+                const body = sprite.body as Phaser.Physics.Arcade.Body;
+                body.setSize(16, 16);
+
+                const entity = entityManager.createEntity();
+                entity.addComponent({ type: 'Transform', x: sprite.x, y: sprite.y, width: 18, height: 18 } as TransformComponent);
+                entity.addComponent({
+                    type: 'Render',
+                    gameObject: sprite,
+                    depth: 8,
+                    idleFrame: visual.frame,
+                    activeFrame: visual.activeFrame
+                } as RenderComponent);
+                entity.addComponent({ type: 'PhysicsBody', body, isGrounded: false } as PhysicsBodyComponent);
+                entity.addComponent({ type: 'Carryable', carriedBy: null, weight: 'heavy' } as CarryableComponent);
+
+            } else if (entData.type === 'key') {
+                const visual = getVisual(144);
+                const sprite = scene.physics.add.sprite(entX, entY, visual.texture, visual.frame);
+                sprite.setDepth(8);
+                
+                const body = sprite.body as Phaser.Physics.Arcade.Body;
+                body.setAllowGravity(false);
+                body.checkCollision.none = true;
+
+                const entity = entityManager.createEntity();
+                entity.addComponent({ type: 'Transform', x: sprite.x, y: sprite.y, width: 18, height: 18 } as TransformComponent);
+                entity.addComponent({
+                    type: 'Render',
+                    gameObject: sprite,
+                    depth: 8,
+                    idleFrame: visual.frame,
+                    activeFrame: visual.activeFrame
+                } as RenderComponent);
+                entity.addComponent({ type: 'PhysicsBody', body, isGrounded: false } as PhysicsBodyComponent);
+                entity.addComponent({ type: 'Carryable', carriedBy: null, weight: 'light' } as CarryableComponent);
+
+            } else if (entData.type === 'checkpoint') {
+                const visual = getVisual(111);
+                const sprite = scene.add.sprite(entX, entY, visual.texture, visual.frame);
+                sprite.setDepth(5);
+
+                const entity = entityManager.createEntity();
+                entity.addComponent({ type: 'Transform', x: sprite.x, y: sprite.y, width: 18, height: 18 } as TransformComponent);
+                entity.addComponent({
+                    type: 'Render',
+                    gameObject: sprite,
+                    depth: 5,
+                    idleFrame: visual.frame,
+                    activeFrame: visual.activeFrame
+                } as RenderComponent);
+                entity.addComponent({ type: 'Checkpoint', activated: false, playerActivated: null } as CheckpointComponent);
+
+            } else if (entData.type === 'exitDoor') {
+                const visual = getVisual(110);
+                const sprite = scene.add.sprite(entX, entY, visual.texture, visual.frame);
+                sprite.setDepth(5);
+
+                const entity = entityManager.createEntity();
+                entity.addComponent({ type: 'Transform', x: sprite.x, y: sprite.y, width: 18, height: 18 } as TransformComponent);
+                entity.addComponent({
+                    type: 'Render',
+                    gameObject: sprite,
+                    depth: 5,
+                    idleFrame: visual.frame,
+                    activeFrame: visual.activeFrame
+                } as RenderComponent);
+                entity.addComponent({ type: 'ExitDoor', playersPresent: new Set() } as ExitDoorComponent);
+
+            } else if (entData.type === 'ladder') {
+                const visual = getVisual(71);
+                const sprite = scene.add.sprite(entX, entY, visual.texture, visual.frame);
+                sprite.setDepth(4);
+
+                const entity = entityManager.createEntity();
+                entity.addComponent({ type: 'Transform', x: sprite.x, y: sprite.y, width: 18, height: 18 } as TransformComponent);
+                entity.addComponent({
+                    type: 'Render',
+                    gameObject: sprite,
+                    depth: 4,
+                    idleFrame: visual.frame,
+                    activeFrame: visual.activeFrame
+                } as RenderComponent);
+                entity.addComponent({ type: 'Interactable', interactionType: 'ladder', range: 18 } as InteractableComponent);
+
+            } else if (entData.type === 'button') {
+                const props = entData.properties || {};
+                const channel = String(props.channel || '1');
+                const listenChannel = props.listenChannel ? String(props.listenChannel) : undefined;
+                const triggerType = (props.triggerType as 'interact' | 'pressure') || 'interact';
+                const visualType = (props.visualType as 'button' | 'lever') || 'lever';
+
+                const defaultFrame = visualType === 'lever' ? 127 : 107;
+                const defaultActiveFrame = visualType === 'lever' ? 128 : 108;
+                const visual = getVisual(defaultFrame, defaultActiveFrame);
+                const sprite = scene.add.sprite(entX, entY, visual.texture, visual.frame);
+                sprite.setDepth(5);
+
+                const entity = entityManager.createEntity();
+                entity.addComponent({ type: 'Transform', x: sprite.x, y: sprite.y, width: 18, height: 18 } as TransformComponent);
+                entity.addComponent({
+                    type: 'Render',
+                    gameObject: sprite,
+                    depth: 5,
+                    idleFrame: visual.frame,
+                    activeFrame: visual.activeFrame
+                } as RenderComponent);
+                entity.addComponent({
+                    type: 'Trigger',
+                    channel,
+                    listenChannel,
+                    triggerType,
+                    isActive: false,
+                    visualType
+                } as TriggerComponent);
+
+            } else if (entData.type === 'gate') {
+                const props = entData.properties || {};
+                const listenChannel = String(props.listenChannel || '1');
+
+                const visual = getVisual(150);
+                const sprite = scene.physics.add.sprite(entX, entY, visual.texture, visual.frame);
+                sprite.setDepth(6);
+                gatesGroup.add(sprite);
+
+                const body = sprite.body as Phaser.Physics.Arcade.Body;
+                body.setAllowGravity(false);
+                body.setImmovable(true);
+
+                const entity = entityManager.createEntity();
+                entity.addComponent({ type: 'Transform', x: sprite.x, y: sprite.y, width: 18, height: 18 } as TransformComponent);
+                entity.addComponent({
+                    type: 'Render',
+                    gameObject: sprite,
+                    depth: 6,
+                    idleFrame: visual.frame,
+                    activeFrame: visual.activeFrame
+                } as RenderComponent);
+                entity.addComponent({ type: 'PhysicsBody', body, isGrounded: false } as PhysicsBodyComponent);
+                entity.addComponent({
+                    type: 'Triggerable',
+                    listenChannel,
+                    state: false,
+                    targetType: 'gate'
+                } as TriggerableComponent);
+            } else if (entData.type === 'launcher') {
+                const visual = getVisual(107, 108);
+                const sprite = scene.physics.add.sprite(entX, entY, visual.texture, visual.frame);
+                sprite.setDepth(5);
+                launchersGroup.add(sprite);
+
+                const body = sprite.body as Phaser.Physics.Arcade.Body;
+                body.setAllowGravity(false);
+                body.setImmovable(true);
+
+                const entity = entityManager.createEntity();
+                entity.addComponent({ type: 'Transform', x: sprite.x, y: sprite.y, width: 18, height: 18 } as TransformComponent);
+                entity.addComponent({
+                    type: 'Render',
+                    gameObject: sprite,
+                    depth: 5,
+                    idleFrame: visual.frame,
+                    activeFrame: visual.activeFrame
+                } as RenderComponent);
+                entity.addComponent({ type: 'PhysicsBody', body, isGrounded: false } as PhysicsBodyComponent);
+                entity.addComponent({
+                    type: 'Launcher',
+                    launchForce: -400,
+                    isActivated: false,
+                    activationTimer: 0
+                } as LauncherComponent);
             }
         }
 
+        // 7. Instantiate Players
         const player1Entity = createPlayerEntity(
             scene,
             humanSpawn.x * TILE_SIZE + TILE_SIZE / 2,
@@ -103,11 +366,25 @@ export class LevelLoader {
             entityManager,
         );
 
-        // Add colliders between players and terrain layer
         const p1Render = player1Entity.getComponent<RenderComponent>('Render')!;
         const p2Render = player2Entity.getComponent<RenderComponent>('Render')!;
+
+        // 8. Bind Physics Colliders
         scene.physics.add.collider(p1Render.gameObject, terrainLayer);
         scene.physics.add.collider(p2Render.gameObject, terrainLayer);
+        scene.physics.add.collider(cratesGroup, terrainLayer);
+
+        scene.physics.add.collider(p1Render.gameObject, cratesGroup);
+        scene.physics.add.collider(p2Render.gameObject, cratesGroup);
+        scene.physics.add.collider(cratesGroup, cratesGroup);
+
+        scene.physics.add.collider(p1Render.gameObject, gatesGroup);
+        scene.physics.add.collider(p2Render.gameObject, gatesGroup);
+        scene.physics.add.collider(cratesGroup, gatesGroup);
+
+        scene.physics.add.collider(p1Render.gameObject, launchersGroup);
+        scene.physics.add.collider(p2Render.gameObject, launchersGroup);
+        scene.physics.add.collider(cratesGroup, launchersGroup);
 
         return {
             levelWidthPx,

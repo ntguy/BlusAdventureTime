@@ -49,6 +49,15 @@ export class PreloadScene extends Phaser.Scene {
             endFrame: BG_TILESET_COLS * BG_TILESET_ROWS - 1,
         });
 
+        // Load custom full-screen background image
+        this.load.image('default_bg', 'assets/backgrounds/default_bg.png');
+
+        // Load Blu dog spritesheet (16x16 frames)
+        this.load.spritesheet('bluSpritesheet', 'assets/sprites/bluSpritesheet.png', {
+            frameWidth: 16,
+            frameHeight: 16
+        });
+
         // ── Audio ──
         // Load the single placeholder SFX for all sound effects
         const placeholderAudio = 'assets/audio/sfx/collect1.mp3';
@@ -57,10 +66,40 @@ export class PreloadScene extends Phaser.Scene {
         }
 
         // ── Level data ──
+        // Load the single placeholder level JSON
         this.load.json('test_level', 'assets/levels/test_level.json');
     }
 
     create(): void {
+        // Create globally reusable animations for Blu (dog player)
+        this.anims.create({
+            key: 'blu_idle',
+            frames: this.anims.generateFrameNumbers('bluSpritesheet', { start: 0, end: 2 }),
+            frameRate: 6,
+            repeat: -1
+        });
+
+        this.anims.create({
+            key: 'blu_walk',
+            frames: this.anims.generateFrameNumbers('bluSpritesheet', { start: 6, end: 8 }),
+            frameRate: 10,
+            repeat: -1
+        });
+
+        this.anims.create({
+            key: 'blu_bark',
+            frames: this.anims.generateFrameNumbers('bluSpritesheet', { start: 3, end: 4 }),
+            frameRate: 8,
+            repeat: 0
+        });
+
+        this.anims.create({
+            key: 'blu_sit',
+            frames: this.anims.generateFrameNumbers('bluSpritesheet', { start: 12, end: 13 }),
+            frameRate: 4,
+            repeat: -1
+        });
+
         this.scene.start('MainMenuScene');
     }
 }

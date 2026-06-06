@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, TILE_SIZE } from '../constants';
+import { GAME_WIDTH, GAME_HEIGHT, TILE_SIZE, BG_TILE_SIZE } from '../constants';
 import { LevelData, EntityData } from '../levels/LevelSchema';
 
 export class EditorScene extends Phaser.Scene {
@@ -37,13 +37,25 @@ export class EditorScene extends Phaser.Scene {
     private paletteTexts: Phaser.GameObjects.Text[] = [];
     private entityVisuals: Map<string, Phaser.GameObjects.Text> = new Map();
 
+    private selectedEntity: EntityData | null = null;
+    private selectedEntityText!: Phaser.GameObjects.Text;
+    private selectedTilecodeText!: Phaser.GameObjects.Text;
+    private editPropsButton!: Phaser.GameObjects.Text;
+    private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+    private wasdKeys!: any;
+    private gridButtons: Phaser.GameObjects.Text[] = [];
+
     private entityPalette = [
         { label: 'H', type: 'humanSpawn', color: '#00ff88', name: 'HUMAN SPAWN' },
         { label: 'D', type: 'dogSpawn', color: '#00ffff', name: 'DOG SPAWN' },
         { label: 'DR', type: 'exitDoor', color: '#ff00ff', name: 'EXIT DOOR' },
         { label: 'CR', type: 'crate', color: '#b5651d', name: 'CRATE' },
         { label: 'KY', type: 'key', color: '#ffff00', name: 'KEY' },
-        { label: 'CP', type: 'checkpoint', color: '#0055ff', name: 'CHECKPOINT' }
+        { label: 'CP', type: 'checkpoint', color: '#0055ff', name: 'CHECKPOINT' },
+        { label: 'LD', type: 'ladder', color: '#a8a8a8', name: 'LADDER' },
+        { label: 'BT', type: 'button', color: '#ff5555', name: 'BUTTON/LEVER' },
+        { label: 'GT', type: 'gate', color: '#ffaa00', name: 'GATE' },
+        { label: 'LN', type: 'launcher', color: '#ff00aa', name: 'LAUNCHER' }
     ];
 
     constructor() {
@@ -67,6 +79,8 @@ export class EditorScene extends Phaser.Scene {
         this.cameras.main.setViewport(0, 0, 656, 540);
         this.cameras.main.setScroll(0, 0);
         this.cameras.main.setZoom(1.0);
+
+        this.cameras.main.setBackgroundColor('#1a1a2e');
 
         this.uiCamera = this.cameras.add(656, 0, 280, 540);
         this.uiCamera.setScroll(656, 0);
@@ -92,11 +106,16 @@ export class EditorScene extends Phaser.Scene {
         this.levelData.entities.forEach(ent => this.drawEntityVisual(ent));
 
         // 8. Setup Inputs & Controls
+        this.cursors = this.input.keyboard!.createCursorKeys();
+        this.wasdKeys = this.input.keyboard!.addKeys('W,A,S,D');
         this.setupPanningAndZooming();
         this.setupKeyboardShortcuts();
         this.setupPointerInput();
 
-        // 9. Camera ignores to prevent overlapping rendering
+        // 9. Draw Grid Resizing Buttons
+        this.drawGridResizingButtons();
+
+        // 10. Camera ignores to prevent overlapping rendering
         this.cameras.main.ignore(this.uiGroup);
         this.uiCamera.ignore(this.workspaceGroup);
 
@@ -105,14 +124,15 @@ export class EditorScene extends Phaser.Scene {
     }
 
     update(time: number, delta: number): void {
-        // Keyboard arrow panning controls
+        // Keyboard arrow and WASD panning controls
         const panSpeed = 6;
-        const cursors = this.input.keyboard!.createCursorKeys();
+        const cursors = this.cursors;
+        const keys = this.wasdKeys;
         
-        if (cursors.left.isDown) this.cameras.main.scrollX -= panSpeed;
-        if (cursors.right.isDown) this.cameras.main.scrollX += panSpeed;
-        if (cursors.up.isDown) this.cameras.main.scrollY -= panSpeed;
-        if (cursors.down.isDown) this.cameras.main.scrollY += panSpeed;
+        if (cursors.left.isDown || (keys.A && keys.A.isDown)) this.cameras.main.scrollX -= panSpeed;
+        if (cursors.right.isDown || (keys.D && keys.D.isDown)) this.cameras.main.scrollX += panSpeed;
+        if (cursors.up.isDown || (keys.W && keys.W.isDown)) this.cameras.main.scrollY -= panSpeed;
+        if (cursors.down.isDown || (keys.S && keys.S.isDown)) this.cameras.main.scrollY += panSpeed;
 
         // Clamp camera scroll bounds
         const maxScrollX = this.levelData.meta.width * TILE_SIZE - 656;
@@ -163,10 +183,10 @@ export class EditorScene extends Phaser.Scene {
             height: this.levelData.meta.height
         });
 
-        const tileset = this.map.addTilesetImage('tilemap_packed', 'tilemap_packed', TILE_SIZE, TILE_SIZE, 0, 0)!;
-        const bgTileset = this.map.addTilesetImage('bg_tilemap_packed', 'bg_tilemap_packed', TILE_SIZE, TILE_SIZE, 0, 0)!;
+        const tileset = this.map.addTilesetImage('tilemap_packed', 'tilemap_packed', TILE_SIZE, TILE_SIZE, 0, 0, 0)!;
+        const bgTileset = this.map.addTilesetImage('bg_tilemap_packed', 'bg_tilemap_packed', BG_TILE_SIZE, BG_TILE_SIZE, 0, 0, 180)!;
 
-        this.bgLayer = this.map.createBlankLayer('background', bgTileset, 0, 0)!;
+        this.bgLayer = this.map.createBlankLayer('background', [tileset, bgTileset], 0, 0)!;
         this.terrainLayer = this.map.createBlankLayer('terrain', tileset, 0, 0)!;
 
         this.bgLayer.setDepth(1);
@@ -174,6 +194,8 @@ export class EditorScene extends Phaser.Scene {
 
         this.workspaceGroup.add(this.bgLayer);
         this.workspaceGroup.add(this.terrainLayer);
+
+        this.cameras.main.setBackgroundColor('#1a1a2e');
 
         const width = this.levelData.meta.width;
         for (let i = 0; i < this.levelData.layers.terrain.length; i++) {
@@ -215,13 +237,29 @@ export class EditorScene extends Phaser.Scene {
             exitDoor: { t: 'DR', c: '#ff00ff' },
             crate: { t: 'CR', c: '#b5651d' },
             key: { t: 'KY', c: '#ffff00' },
-            checkpoint: { t: 'CP', c: '#0055ff' }
+            checkpoint: { t: 'CP', c: '#0055ff' },
+            ladder: { t: 'LD', c: '#a8a8a8' },
+            button: { t: 'BT', c: '#ff5555' },
+            gate: { t: 'GT', c: '#ffaa00' },
+            launcher: { t: 'LN', c: '#ff00aa' }
         };
 
         const config = labels[ent.type] || { t: '?', c: '#ffffff' };
-        const txt = this.add.text(ent.x * TILE_SIZE + TILE_SIZE / 2, ent.y * TILE_SIZE + TILE_SIZE / 2, config.t, {
+        
+        // Append channel suffix for buttons and gates to visualize connections
+        let labelText = config.t;
+        const props = ent.properties || {};
+        if (ent.type === 'button') {
+            const ch = props.channel || '1';
+            labelText = `B${ch}`;
+        } else if (ent.type === 'gate') {
+            const lCh = props.listenChannel || '1';
+            labelText = `G${lCh}`;
+        }
+
+        const txt = this.add.text(ent.x * TILE_SIZE + TILE_SIZE / 2, ent.y * TILE_SIZE + TILE_SIZE / 2, labelText, {
             fontFamily: '"Press Start 2P"',
-            fontSize: '9px',
+            fontSize: labelText.length > 2 ? '6px' : '8px',
             color: config.c
         }).setOrigin(0.5).setDepth(25);
 
@@ -285,19 +323,45 @@ export class EditorScene extends Phaser.Scene {
         // Layers Title Row
         const layerY = 135;
         this.add.text(startX + 18, layerY, "LAYER:", { fontFamily: '"Press Start 2P"', fontSize: '9px', color: '#888888' });
-        this.layerButtons['terrain'] = this.createSidebarButton("🧱TERRAIN", startX + 90, layerY, () => this.setLayer('terrain'));
-        this.layerButtons['background'] = this.createSidebarButton("☁️BG", startX + 165, layerY, () => this.setLayer('background'));
-        this.layerButtons['entities'] = this.createSidebarButton("👾ENTITY", startX + 230, layerY, () => this.setLayer('entities'));
+        this.layerButtons['terrain'] = this.createSidebarButton("TERRAIN", startX + 85, layerY, () => this.setLayer('terrain'));
+        this.layerButtons['background'] = this.createSidebarButton("BG", startX + 160, layerY, () => this.setLayer('background'));
+        this.layerButtons['entities'] = this.createSidebarButton("ENTITY", startX + 225, layerY, () => this.setLayer('entities'));
         
         this.uiGroup.add(this.layerButtons['terrain']);
         this.uiGroup.add(this.layerButtons['background']);
         this.uiGroup.add(this.layerButtons['entities']);
 
-        // Separator line
+        // Separator line (shifted to y=165)
         const sep = this.add.graphics();
         sep.lineStyle(1, 0x222233, 0.8);
         sep.strokeLineShape(new Phaser.Geom.Line(startX + 15, 165, startX + 265, 165));
         this.uiGroup.add(sep);
+
+        // Selected GID/Tilecode text display at y=180
+        this.selectedTilecodeText = this.add.text(center, 180, "", {
+            fontFamily: '"Press Start 2P"',
+            fontSize: '7px',
+            color: '#00ffff',
+            align: 'center'
+        }).setOrigin(0.5);
+        this.uiGroup.add(this.selectedTilecodeText);
+        this.cameras.main.ignore(this.selectedTilecodeText);
+
+        // Properties Panel Text/Button at the bottom
+        this.selectedEntityText = this.add.text(center, 475, "Click entity to\nedit properties", {
+            fontFamily: '"Press Start 2P"',
+            fontSize: '7px',
+            color: '#aaaaaa',
+            align: 'center'
+        }).setOrigin(0.5);
+        this.uiGroup.add(this.selectedEntityText);
+        this.cameras.main.ignore(this.selectedEntityText);
+
+        this.editPropsButton = this.createSidebarButton("⚙️ EDIT PROPERTIES", center, 515, () => this.editSelectedEntityProps());
+        this.editPropsButton.setColor('#00ffff');
+        this.editPropsButton.setVisible(false);
+        this.uiGroup.add(this.editPropsButton);
+        this.cameras.main.ignore(this.editPropsButton);
 
         // Selection highlight graphics box
         this.paletteHighlight = this.add.graphics();
@@ -345,7 +409,7 @@ export class EditorScene extends Phaser.Scene {
             }
         } 
         else if (this.activeLayer === 'background') {
-            // ALL 24 background tiles
+            // First: 24 background tiles from bg_tilemap_packed (GIDs 180..203)
             const totalBgTiles = 24;
             for (let i = 0; i < totalBgTiles; i++) {
                 const col = i % 5;
@@ -357,9 +421,33 @@ export class EditorScene extends Phaser.Scene {
                 sprite.setScale(1.5);
                 sprite.setInteractive({ useHandCursor: true });
                 
-                const currentIdx = i;
+                const currentGid = 180 + i;
                 sprite.on('pointerdown', () => {
-                    this.selectedTileIndex = currentIdx;
+                    this.selectedTileIndex = currentGid;
+                    this.updateSelectionHighlights();
+                });
+
+                this.uiGroup.add(sprite);
+                this.cameras.main.ignore(sprite);
+                this.paletteSprites.push(sprite);
+            }
+
+            // Second: 180 terrain tiles from tilemap_packed (GIDs 0..179)
+            const totalTerrainTiles = 180;
+            const startRowForTerrain = Math.ceil(totalBgTiles / 5); // 5 rows offset
+            for (let i = 0; i < totalTerrainTiles; i++) {
+                const col = i % 5;
+                const row = startRowForTerrain + Math.floor(i / 5);
+                const x = gridStartX + col * spacingX;
+                const y = gridStartY + row * spacingY;
+
+                const sprite = this.add.sprite(x, y, 'tilemap_packed', i);
+                sprite.setScale(2.0);
+                sprite.setInteractive({ useHandCursor: true });
+
+                const currentGid = i;
+                sprite.on('pointerdown', () => {
+                    this.selectedTileIndex = currentGid;
                     this.updateSelectionHighlights();
                 });
 
@@ -405,8 +493,8 @@ export class EditorScene extends Phaser.Scene {
             const row = Math.floor(idx / 5);
             spr.y = gridStartY + row * spacingY + this.paletteScrollY;
             
-            // Mask items scrolling outside y boundaries: 175 to 525
-            const isVisible = spr.y >= 175 && spr.y <= 525;
+            // Mask items scrolling outside y boundaries: 175 to 450
+            const isVisible = spr.y >= 175 && spr.y <= 450;
             spr.setVisible(isVisible);
             if (isVisible) spr.setInteractive();
             else spr.disableInteractive();
@@ -416,7 +504,7 @@ export class EditorScene extends Phaser.Scene {
             const row = Math.floor(idx / 5);
             txt.y = gridStartY + row * spacingY + this.paletteScrollY;
             
-            const isVisible = txt.y >= 175 && txt.y <= 525;
+            const isVisible = txt.y >= 175 && txt.y <= 450;
             txt.setVisible(isVisible);
             if (isVisible) txt.setInteractive();
             else txt.disableInteractive();
@@ -436,6 +524,12 @@ export class EditorScene extends Phaser.Scene {
             btn.setColor(this.activeTool === key ? '#ffff00' : '#888888');
         });
 
+        if (this.activeLayer === 'terrain' || this.activeLayer === 'background') {
+            this.selectedTilecodeText.setText(`SELECTED TILE CODE: ${this.selectedTileIndex}`);
+        } else if (this.activeLayer === 'entities') {
+            this.selectedTilecodeText.setText(`SELECTED ENTITY:\n${this.selectedEntityType.toUpperCase()}`);
+        }
+
         this.paletteHighlight.clear();
         
         if (this.activeTool === 'erase') {
@@ -454,7 +548,14 @@ export class EditorScene extends Phaser.Scene {
             }
         } 
         else if (this.activeLayer === 'background') {
-            const activeIdx = this.selectedTileIndex;
+            const activeGid = this.selectedTileIndex;
+            let activeIdx = -1;
+            if (activeGid >= 180) {
+                activeIdx = activeGid - 180;
+            } else if (activeGid >= 0) {
+                activeIdx = 24 + activeGid;
+            }
+
             if (activeIdx >= 0 && this.paletteSprites[activeIdx]) {
                 const spr = this.paletteSprites[activeIdx];
                 if (spr.visible) {
@@ -479,7 +580,14 @@ export class EditorScene extends Phaser.Scene {
             if (pointer.x >= 656) {
                 // Scroll visual palette
                 this.paletteScrollY -= deltaY * 0.4;
-                const maxScroll = this.activeLayer === 'terrain' ? -1450 : 0;
+                
+                let maxScroll = 0;
+                if (this.activeLayer === 'terrain') {
+                    maxScroll = -1450;
+                } else if (this.activeLayer === 'background') {
+                    maxScroll = -1680;
+                }
+
                 this.paletteScrollY = Phaser.Math.Clamp(this.paletteScrollY, maxScroll, 0);
                 this.updatePalettePositions();
             } else {
@@ -549,10 +657,20 @@ export class EditorScene extends Phaser.Scene {
                 this.bgLayer.putTileAt(this.selectedTileIndex, tileX, tileY);
                 this.levelData.layers.background[idx] = this.selectedTileIndex;
             } else if (this.activeLayer === 'entities') {
+                const existing = this.levelData.entities.find(e => e.x === tileX && e.y === tileY);
+                if (existing) {
+                    this.selectedEntity = existing;
+                    this.updateSelectedEntityUI();
+                    this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.5 } as any);
+                    return;
+                }
+
                 this.removeEntityAt(tileX, tileY);
-                const ent: EntityData = { type: this.selectedEntityType, x: tileX, y: tileY };
+                const ent: EntityData = { type: this.selectedEntityType, x: tileX, y: tileY, properties: {} };
                 this.levelData.entities.push(ent);
                 this.drawEntityVisual(ent);
+                this.selectedEntity = ent;
+                this.updateSelectedEntityUI();
             }
         } else if (this.activeTool === 'erase') {
             if (this.activeLayer === 'terrain') {
@@ -562,6 +680,11 @@ export class EditorScene extends Phaser.Scene {
                 this.bgLayer.removeTileAt(tileX, tileY);
                 this.levelData.layers.background[idx] = -1;
             } else if (this.activeLayer === 'entities') {
+                const existing = this.levelData.entities.find(e => e.x === tileX && e.y === tileY);
+                if (existing && this.selectedEntity === existing) {
+                    this.selectedEntity = null;
+                    this.updateSelectedEntityUI();
+                }
                 this.removeEntityAt(tileX, tileY);
             }
         }
@@ -692,5 +815,320 @@ export class EditorScene extends Phaser.Scene {
         btn.on('pointerdown', callback);
 
         return btn;
+    }
+
+    private updateSelectedEntityUI(): void {
+        if (!this.selectedEntity) {
+            this.selectedEntityText.setText("Click entity to\nedit properties");
+            this.selectedEntityText.setColor('#aaaaaa');
+            this.editPropsButton.setVisible(false);
+            return;
+        }
+
+        const ent = this.selectedEntity;
+        const name = ent.type.toUpperCase();
+        const props = ent.properties || {};
+
+        if (ent.type === 'button') {
+            const ch = props.channel || '1';
+            const tType = props.triggerType || 'interact';
+            const vType = props.visualType || 'lever';
+            const lCh = props.listenChannel ? `\nListen: ${props.listenChannel}` : '';
+            this.selectedEntityText.setText(`Selected: ${name}\nChannel: ${ch}\nMode: ${tType} (${vType})${lCh}`);
+            this.selectedEntityText.setColor('#ff5555');
+            this.editPropsButton.setVisible(true);
+        } else if (ent.type === 'gate') {
+            const lCh = props.listenChannel || '1';
+            this.selectedEntityText.setText(`Selected: ${name}\nListen Ch: ${lCh}`);
+            this.selectedEntityText.setColor('#ffaa00');
+            this.editPropsButton.setVisible(true);
+        } else {
+            this.selectedEntityText.setText(`Selected: ${name}\n(No editable properties)`);
+            this.selectedEntityText.setColor('#ffffff');
+            this.editPropsButton.setVisible(false);
+        }
+    }
+
+    private editSelectedEntityProps(): void {
+        if (!this.selectedEntity) return;
+
+        const ent = this.selectedEntity;
+        const props = ent.properties || {};
+
+        if (ent.type === 'button') {
+            const ch = prompt("Enter Output Trigger Channel (e.g. 1, gate_a):", String(props.channel || "1"));
+            if (ch === null) return;
+
+            const tType = prompt("Enter Trigger Type (interact or pressure):", String(props.triggerType || "interact"));
+            if (tType === null) return;
+
+            const vType = prompt("Enter Visual Type (button or lever):", String(props.visualType || "lever"));
+            if (vType === null) return;
+
+            const lCh = prompt("Enter optional Listen Channel (e.g. gravity_flip, or leave empty):", String(props.listenChannel || ""));
+            if (lCh === null) return;
+
+            ent.properties = {
+                channel: ch.trim() || "1",
+                triggerType: tType.trim() === "pressure" ? "pressure" : "interact",
+                visualType: vType.trim() === "button" ? "button" : "lever",
+                listenChannel: lCh.trim() ? lCh.trim() : undefined
+            };
+
+            this.sound.play('sfx_checkpoint', { volume: 0.3 });
+            this.updateSelectedEntityUI();
+            this.createWorkspaceTilemap(); // Refresh visually
+        } else if (ent.type === 'gate') {
+            const lCh = prompt("Enter Listen Channel (e.g. 1, gate_a):", String(props.listenChannel || "1"));
+            if (lCh === null) return;
+
+            ent.properties = {
+                listenChannel: lCh.trim() || "1"
+            };
+
+            this.sound.play('sfx_checkpoint', { volume: 0.3 });
+            this.updateSelectedEntityUI();
+            this.createWorkspaceTilemap(); // Refresh visually
+        }
+     }
+
+
+
+    private drawGridResizingButtons(): void {
+        this.gridButtons.forEach(btn => btn.destroy());
+        this.gridButtons = [];
+
+        const w = this.levelData.meta.width;
+        const h = this.levelData.meta.height;
+        const wPx = w * TILE_SIZE;
+        const hPx = h * TILE_SIZE;
+
+        const style = {
+            fontFamily: '"Press Start 2P"',
+            fontSize: '12px',
+            color: '#00ffff',
+            backgroundColor: '#000000dd',
+            padding: { x: 4, y: 4 }
+        };
+
+        const createBtn = (txt: string, x: number, y: number, callback: () => void) => {
+            const btn = this.add.text(x, y, txt, style).setOrigin(0.5).setInteractive({ useHandCursor: true });
+            btn.on('pointerdown', (ptr: any) => {
+                ptr.event.stopPropagation();
+                callback();
+            });
+            btn.on('pointerover', () => btn.setColor('#ffff00'));
+            btn.on('pointerout', () => btn.setColor('#00ffff'));
+            this.workspaceGroup.add(btn);
+            this.gridButtons.push(btn);
+        };
+
+        // LEFT edge (shifts columns at the left)
+        createBtn("+L", -24, (hPx / 2) - 15, () => this.resizeLeft(1));
+        createBtn("-L", -24, (hPx / 2) + 15, () => this.resizeLeft(-1));
+
+        // RIGHT edge (adds/removes columns at the right)
+        createBtn("+R", wPx + 24, (hPx / 2) - 15, () => this.resizeWidth(1));
+        createBtn("-R", wPx + 24, (hPx / 2) + 15, () => this.resizeWidth(-1));
+
+        // TOP edge (shifts rows at the top)
+        createBtn("+T", (wPx / 2) - 15, -24, () => this.resizeTop(1));
+        createBtn("-T", (wPx / 2) + 15, -24, () => this.resizeTop(-1));
+
+        // BOTTOM edge (adds/removes rows at the bottom)
+        createBtn("+B", (wPx / 2) - 15, hPx + 24, () => this.resizeHeight(1));
+        createBtn("-B", (wPx / 2) + 15, hPx + 24, () => this.resizeHeight(-1));
+    }
+
+    private resizeLeft(delta: number): void {
+        const oldW = this.levelData.meta.width;
+        const newW = oldW + delta;
+        if (newW < 10 || newW > 100) return;
+
+        const h = this.levelData.meta.height;
+        const resizeLayer = (arr: number[]) => {
+            const newArr = Array(newW * h).fill(-1);
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < newW; x++) {
+                    const newIdx = y * newW + x;
+                    if (delta > 0) {
+                        if (x >= delta) {
+                            newArr[newIdx] = arr[y * oldW + (x - delta)];
+                        }
+                    } else {
+                        const srcX = x - delta;
+                        if (srcX < oldW) {
+                            newArr[newIdx] = arr[y * oldW + srcX];
+                        }
+                    }
+                }
+            }
+            return newArr;
+        };
+
+        this.levelData.layers.terrain = resizeLayer(this.levelData.layers.terrain);
+        this.levelData.layers.background = resizeLayer(this.levelData.layers.background);
+        this.levelData.layers.foreground = resizeLayer(this.levelData.layers.foreground);
+        this.levelData.meta.width = newW;
+
+        // Shift entities
+        this.levelData.entities.forEach(ent => {
+            ent.x += delta;
+        });
+        this.levelData.entities = this.levelData.entities.filter(ent => ent.x >= 0 && ent.x < newW);
+
+        if (this.selectedEntity && (this.selectedEntity.x < 0 || this.selectedEntity.x >= newW)) {
+            this.selectedEntity = null;
+            this.updateSelectedEntityUI();
+        }
+
+        this.createWorkspaceTilemap();
+        this.drawGrid();
+        this.drawGridResizingButtons();
+        
+        this.entityVisuals.forEach(v => v.destroy());
+        this.entityVisuals.clear();
+        this.levelData.entities.forEach(ent => this.drawEntityVisual(ent));
+
+        this.sound.play('sfx_checkpoint', { volume: 0.3 });
+    }
+
+    private resizeTop(delta: number): void {
+        const w = this.levelData.meta.width;
+        const oldH = this.levelData.meta.height;
+        const newH = oldH + delta;
+        if (newH < 8 || newH > 50) return;
+
+        const resizeLayer = (arr: number[]) => {
+            const newArr = Array(w * newH).fill(-1);
+            for (let y = 0; y < newH; y++) {
+                for (let x = 0; x < w; x++) {
+                    const newIdx = y * w + x;
+                    if (delta > 0) {
+                        if (y >= delta) {
+                            newArr[newIdx] = arr[(y - delta) * w + x];
+                        }
+                    } else {
+                        const srcY = y - delta;
+                        if (srcY < oldH) {
+                            newArr[newIdx] = arr[srcY * w + x];
+                        }
+                    }
+                }
+            }
+            return newArr;
+        };
+
+        this.levelData.layers.terrain = resizeLayer(this.levelData.layers.terrain);
+        this.levelData.layers.background = resizeLayer(this.levelData.layers.background);
+        this.levelData.layers.foreground = resizeLayer(this.levelData.layers.foreground);
+        this.levelData.meta.height = newH;
+
+        // Shift entities
+        this.levelData.entities.forEach(ent => {
+            ent.y += delta;
+        });
+        this.levelData.entities = this.levelData.entities.filter(ent => ent.y >= 0 && ent.y < newH);
+
+        if (this.selectedEntity && (this.selectedEntity.y < 0 || this.selectedEntity.y >= newH)) {
+            this.selectedEntity = null;
+            this.updateSelectedEntityUI();
+        }
+
+        this.createWorkspaceTilemap();
+        this.drawGrid();
+        this.drawGridResizingButtons();
+        
+        this.entityVisuals.forEach(v => v.destroy());
+        this.entityVisuals.clear();
+        this.levelData.entities.forEach(ent => this.drawEntityVisual(ent));
+
+        this.sound.play('sfx_checkpoint', { volume: 0.3 });
+    }
+
+    private resizeWidth(delta: number): void {
+        const oldW = this.levelData.meta.width;
+        const newW = oldW + delta;
+        if (newW < 10 || newW > 100) return;
+
+        const h = this.levelData.meta.height;
+        const resizeLayer = (arr: number[]) => {
+            const newArr = Array(newW * h).fill(-1);
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < newW; x++) {
+                    const newIdx = y * newW + x;
+                    if (x < oldW) {
+                        newArr[newIdx] = arr[y * oldW + x];
+                    }
+                }
+            }
+            return newArr;
+        };
+
+        this.levelData.layers.terrain = resizeLayer(this.levelData.layers.terrain);
+        this.levelData.layers.background = resizeLayer(this.levelData.layers.background);
+        this.levelData.layers.foreground = resizeLayer(this.levelData.layers.foreground);
+        this.levelData.meta.width = newW;
+
+        // Clean up entities outside bounds
+        this.levelData.entities = this.levelData.entities.filter(e => e.x < newW);
+        if (this.selectedEntity && this.selectedEntity.x >= newW) {
+            this.selectedEntity = null;
+            this.updateSelectedEntityUI();
+        }
+
+        this.createWorkspaceTilemap();
+        this.drawGrid();
+        this.drawGridResizingButtons();
+        
+        // Redraw entity visuals
+        this.entityVisuals.forEach(v => v.destroy());
+        this.entityVisuals.clear();
+        this.levelData.entities.forEach(ent => this.drawEntityVisual(ent));
+
+        this.sound.play('sfx_checkpoint', { volume: 0.2 });
+    }
+
+    private resizeHeight(delta: number): void {
+        const w = this.levelData.meta.width;
+        const oldH = this.levelData.meta.height;
+        const newH = oldH + delta;
+        if (newH < 8 || newH > 50) return;
+
+        const resizeLayer = (arr: number[]) => {
+            const newArr = Array(w * newH).fill(-1);
+            for (let y = 0; y < newH; y++) {
+                for (let x = 0; x < w; x++) {
+                    const newIdx = y * w + x;
+                    if (y < oldH) {
+                        newArr[newIdx] = arr[y * w + x];
+                    }
+                }
+            }
+            return newArr;
+        };
+
+        this.levelData.layers.terrain = resizeLayer(this.levelData.layers.terrain);
+        this.levelData.layers.background = resizeLayer(this.levelData.layers.background);
+        this.levelData.layers.foreground = resizeLayer(this.levelData.layers.foreground);
+        this.levelData.meta.height = newH;
+
+        // Clean up entities outside bounds
+        this.levelData.entities = this.levelData.entities.filter(e => e.y < newH);
+        if (this.selectedEntity && this.selectedEntity.y >= newH) {
+            this.selectedEntity = null;
+            this.updateSelectedEntityUI();
+        }
+
+        this.createWorkspaceTilemap();
+        this.drawGrid();
+        this.drawGridResizingButtons();
+        
+        // Redraw entity visuals
+        this.entityVisuals.forEach(v => v.destroy());
+        this.entityVisuals.clear();
+        this.levelData.entities.forEach(ent => this.drawEntityVisual(ent));
+
+        this.sound.play('sfx_checkpoint', { volume: 0.2 });
     }
 }

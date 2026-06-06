@@ -19,12 +19,33 @@ export interface RenderComponent extends Component {
     type: 'Render';
     gameObject: Phaser.GameObjects.GameObject;
     depth: number;
+    idleFrame?: number;
+    activeFrame?: number;
 }
 
 export interface PlayerComponent extends Component {
     type: 'Player';
     playerIndex: 0 | 1; // 0 = Human (Player 1), 1 = Dog (Player 2)
     playerType: 'human' | 'dog';
+    isClimbing?: boolean;
+    idleTime?: number;
+    isBarking?: boolean;
+}
+
+export interface TriggerComponent extends Component {
+    type: 'Trigger';
+    channel: string;
+    listenChannel?: string;
+    triggerType: 'interact' | 'pressure';
+    isActive: boolean;
+    visualType: 'button' | 'lever';
+}
+
+export interface TriggerableComponent extends Component {
+    type: 'Triggerable';
+    listenChannel: string;
+    state: boolean;
+    targetType: 'gate' | 'platform';
 }
 
 // Future components to be used in Milestone 3
@@ -42,7 +63,7 @@ export interface CarrierComponent extends Component {
 
 export interface InteractableComponent extends Component {
     type: 'Interactable';
-    interactionType: 'switch' | 'door' | 'checkpoint';
+    interactionType: 'switch' | 'door' | 'checkpoint' | 'ladder';
     range: number;
 }
 
@@ -56,3 +77,11 @@ export interface ExitDoorComponent extends Component {
     type: 'ExitDoor';
     playersPresent: Set<number>;
 }
+
+export interface LauncherComponent extends Component {
+    type: 'Launcher';
+    launchForce: number;
+    isActivated: boolean;
+    activationTimer: number;
+}
+

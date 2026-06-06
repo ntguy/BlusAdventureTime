@@ -15,15 +15,15 @@ export const PHYSICS = {
     human: {
         width: 14,          // hitbox width
         height: 32,         // hitbox height
-        moveSpeed: 130,     // horizontal speed (px/s)
-        jumpVelocity: -280, // upward jump velocity (px/s, negative is up)
+        moveSpeed: 105,     // horizontal speed (px/s)
+        jumpVelocity: -260, // upward jump velocity (px/s, negative is up)
         drag: 800,          // deceleration drag
     },
     dog: {
         width: 14,
         height: 12,
-        moveSpeed: 150,     // dog is slightly faster
-        jumpVelocity: -370, // dog jumps higher
+        moveSpeed: 115,     // dog is slightly faster
+        jumpVelocity: -310, // dog jumps higher
         drag: 800,
     },
 } as const;
@@ -69,4 +69,11 @@ export const SFX = {
     doorOpen: 'sfx_door_open',
     checkpoint: 'sfx_checkpoint',
     death: 'sfx_death',
+    bark: 'sfx_bark',
 } as const;
+
+export const VISUAL_FAMILIES: Record<number, { active: number, inactive: number }> = {
+    107: { active: 108, inactive: 107 }, // Button
+    127: { active: 128, inactive: 127 }, // Lever
+    165: { active: 166, inactive: 165 }, // Spring Launcher
+};

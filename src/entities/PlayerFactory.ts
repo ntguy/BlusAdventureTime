@@ -14,17 +14,23 @@ export function createPlayerEntity(
     const config = type === 'human' ? PHYSICS.human : PHYSICS.dog;
     const visual = type === 'human' ? VISUAL.human : VISUAL.dog;
 
-    // 1. Create visual rectangle
-    const color = type === 'human' ? 0x222222 : 0xffffff;
-    const gameObject = scene.add.rectangle(
-        x, y,
-        visual.width,
-        visual.height,
-        color,
-    );
+    let gameObject: any;
+    let transformWidth: number = visual.width;
+    let transformHeight: number = visual.height;
 
     if (type === 'dog') {
-        gameObject.setStrokeStyle(1, 0x333333);
+        const sprite = scene.add.sprite(x, y, 'bluSpritesheet', 0);
+        gameObject = sprite;
+        transformWidth = 16;
+        transformHeight = 16;
+    } else {
+        const color = 0x222222;
+        gameObject = scene.add.rectangle(
+            x, y,
+            visual.width,
+            visual.height,
+            color,
+        );
     }
 
     gameObject.setDepth(10);
@@ -35,10 +41,17 @@ export function createPlayerEntity(
 
     // Configure body size and bottom offset alignment
     body.setSize(config.width, config.height);
-    body.setOffset(
-        (visual.width - config.width) / 2,
-        (visual.height - config.height),
-    );
+    if (type === 'dog') {
+        body.setOffset(
+            (16 - config.width) / 2,
+            16 - config.height,
+        );
+    } else {
+        body.setOffset(
+            (visual.width - config.width) / 2,
+            (visual.height - config.height),
+        );
+    }
 
     body.setCollideWorldBounds(false);
     body.setDragX(config.drag);
@@ -51,8 +64,8 @@ export function createPlayerEntity(
         type: 'Transform',
         x: gameObject.x,
         y: gameObject.y,
-        width: visual.width,
-        height: visual.height,
+        width: transformWidth,
+        height: transformHeight,
     } as TransformComponent);
 
     entity.addComponent({

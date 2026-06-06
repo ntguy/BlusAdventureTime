@@ -10,6 +10,8 @@ import { MovementSystem } from '../ecs/systems/MovementSystem';
 import { PhysicsSystem } from '../ecs/systems/PhysicsSystem';
 import { RenderSystem } from '../ecs/systems/RenderSystem';
 import { CameraSystem } from '../ecs/systems/CameraSystem';
+import { TriggerSystem } from '../ecs/systems/TriggerSystem';
+import { LauncherSystem } from '../ecs/systems/LauncherSystem';
 
 export class GameScene extends Phaser.Scene {
     private entityManager!: EntityManager;
@@ -23,6 +25,8 @@ export class GameScene extends Phaser.Scene {
     private physicsSystem!: PhysicsSystem;
     private renderSystem!: RenderSystem;
     private cameraSystem!: CameraSystem;
+    private triggerSystem!: TriggerSystem;
+    private launcherSystem!: LauncherSystem;
 
     // FPS display
     private fpsText!: Phaser.GameObjects.Text;
@@ -69,6 +73,11 @@ export class GameScene extends Phaser.Scene {
         this.physicsSystem = new PhysicsSystem();
         this.renderSystem = new RenderSystem();
         this.cameraSystem = new CameraSystem(this, levelWidthPx, levelHeightPx);
+        this.triggerSystem = new TriggerSystem();
+        this.launcherSystem = new LauncherSystem();
+
+        // Sync initial trigger/target states
+        this.triggerSystem.syncAll(this.entityManager);
 
         // 10. Audio
         this.audioManager = new AudioManager(this);
@@ -93,6 +102,8 @@ export class GameScene extends Phaser.Scene {
 
         // Run ECS Systems in sequential order
         this.movementSystem.update(this.entityManager, delta, this.inputManager);
+        this.launcherSystem.update(this.entityManager, delta);
+        this.triggerSystem.update(this.entityManager, delta, this.inputManager);
         this.physicsSystem.update(this.entityManager, delta);
         this.renderSystem.update(this.entityManager, delta);
 
