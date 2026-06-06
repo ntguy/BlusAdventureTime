@@ -10,8 +10,18 @@ export class EditorScene extends Phaser.Scene {
 
     // Editor States
     private activeTab: 'tiles' | 'entities' = 'tiles';
-    private activeTool: 'terrain' | 'bg' | 'erase' = 'terrain';
+    private activeTool: 'terrain' | 'bg' | 'erase' | 'move' = 'terrain';
     private selectedTileIndex: number = 0; 
+
+    // Dragging state for move tool
+    private isDragging: boolean = false;
+    private dragEntity: EntityData | null = null;
+    private dragTileValue: number = -1;
+    private dragTileLayer: 'terrain' | 'background' | null = null;
+    private dragStartX: number = -1;
+    private dragStartY: number = -1;
+    private dragPreviewSprite: Phaser.GameObjects.Sprite | null = null;
+    private dragPreviewText: Phaser.GameObjects.Text | null = null;
     private selectedEntityType: string = 'crate';
     private tileTags: Record<string, number[]> = {};
     private activeTagFilter: string = 'all';
@@ -140,16 +150,27 @@ export class EditorScene extends Phaser.Scene {
         const cursors = this.cursors;
         const keys = this.wasdKeys;
         
-        if (cursors.left.isDown || (keys.A && keys.A.isDown)) this.cameras.main.scrollX -= panSpeed;
-        if (cursors.right.isDown || (keys.D && keys.D.isDown)) this.cameras.main.scrollX += panSpeed;
-        if (cursors.up.isDown || (keys.W && keys.W.isDown)) this.cameras.main.scrollY -= panSpeed;
-        if (cursors.down.isDown || (keys.S && keys.S.isDown)) this.cameras.main.scrollY += panSpeed;
+        const wDown = cursors.up.isDown || (keys.W && keys.W.isDown) || (keys.w && keys.w.isDown);
+        const sDown = cursors.down.isDown || (keys.S && keys.S.isDown) || (keys.s && keys.s.isDown);
+        const aDown = cursors.left.isDown || (keys.A && keys.A.isDown) || (keys.a && keys.a.isDown);
+        const dDown = cursors.right.isDown || (keys.D && keys.D.isDown) || (keys.d && keys.d.isDown);
+
+        if (aDown) this.cameras.main.scrollX -= panSpeed;
+        if (dDown) this.cameras.main.scrollX += panSpeed;
+        if (wDown) this.cameras.main.scrollY -= panSpeed;
+        if (sDown) this.cameras.main.scrollY += panSpeed;
 
         // Clamp camera scroll bounds
         const maxScrollX = this.levelData.meta.width * TILE_SIZE - 674;
         const maxScrollY = this.levelData.meta.height * TILE_SIZE - 558;
-        this.cameras.main.scrollX = Phaser.Math.Clamp(this.cameras.main.scrollX, -100, maxScrollX + 100);
-        this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY, -100, maxScrollY + 100);
+        
+        const minScrollX = Math.min(-100, maxScrollX - 100);
+        const maxScrollXBound = Math.max(100, maxScrollX + 100);
+        const minScrollY = Math.min(-100, maxScrollY - 100);
+        const maxScrollYBound = Math.max(100, maxScrollY + 100);
+
+        this.cameras.main.scrollX = Phaser.Math.Clamp(this.cameras.main.scrollX, minScrollX, maxScrollXBound);
+        this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY, minScrollY, maxScrollYBound);
     }
 
     private createDefaultLevel(): LevelData {
@@ -408,12 +429,14 @@ export class EditorScene extends Phaser.Scene {
         // Tools Title Row
         const toolY = 72;
         this.add.text(startX + 18, toolY, "TOOL:", { fontFamily: '"Press Start 2P"', fontSize: '9px', color: '#888888' });
-        this.toolButtons['terrain'] = this.createSidebarButton("TERRAIN", startX + 95, toolY, () => this.setTool('terrain'));
-        this.toolButtons['bg'] = this.createSidebarButton("BG", startX + 160, toolY, () => this.setTool('bg'));
-        this.toolButtons['erase'] = this.createSidebarButton("ERASE", startX + 215, toolY, () => this.setTool('erase'));
+        this.toolButtons['terrain'] = this.createSidebarButton("TERR", startX + 80, toolY, () => this.setTool('terrain'));
+        this.toolButtons['bg'] = this.createSidebarButton("BG", startX + 125, toolY, () => this.setTool('bg'));
+        this.toolButtons['erase'] = this.createSidebarButton("ERASE", startX + 180, toolY, () => this.setTool('erase'));
+        this.toolButtons['move'] = this.createSidebarButton("MOVE", startX + 235, toolY, () => this.setTool('move'));
         this.uiGroup.add(this.toolButtons['terrain']);
         this.uiGroup.add(this.toolButtons['bg']);
         this.uiGroup.add(this.toolButtons['erase']);
+        this.uiGroup.add(this.toolButtons['move']);
 
         // Layers Title Row
         const layerY = 96;
@@ -716,6 +739,7 @@ export class EditorScene extends Phaser.Scene {
         kb.addKey(Phaser.Input.Keyboard.KeyCodes.B).on('down', () => this.setTool('terrain'));
         kb.addKey(Phaser.Input.Keyboard.KeyCodes.V).on('down', () => this.setTool('bg'));
         kb.addKey(Phaser.Input.Keyboard.KeyCodes.E).on('down', () => this.setTool('erase'));
+        kb.addKey(Phaser.Input.Keyboard.KeyCodes.M).on('down', () => this.setTool('move'));
 
         kb.addKey(Phaser.Input.Keyboard.KeyCodes.ONE).on('down', () => {
             this.setTab('tiles');
@@ -733,13 +757,27 @@ export class EditorScene extends Phaser.Scene {
     private setupPointerInput(): void {
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
             if (pointer.leftButtonDown()) {
-                this.paintGridAt(pointer);
+                if (this.activeTool === 'move') {
+                    this.startDragging(pointer);
+                } else {
+                    this.paintGridAt(pointer);
+                }
             }
         });
 
         this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
             if (pointer.leftButtonDown()) {
-                this.paintGridAt(pointer);
+                if (this.activeTool === 'move') {
+                    this.updateDragging(pointer);
+                } else {
+                    this.paintGridAt(pointer);
+                }
+            }
+        });
+
+        this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+            if (this.activeTool === 'move') {
+                this.stopDragging(pointer);
             }
         });
     }
@@ -810,7 +848,7 @@ export class EditorScene extends Phaser.Scene {
         this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.5 } as any);
     }
 
-    private setTool(tool: 'terrain' | 'bg' | 'erase'): void {
+    private setTool(tool: 'terrain' | 'bg' | 'erase' | 'move'): void {
         if (this.activeTool === tool) return;
         this.activeTool = tool;
         this.updateSelectionHighlights();
@@ -1138,6 +1176,10 @@ export class EditorScene extends Phaser.Scene {
         fields: { key: string; label: string; type: 'text' | 'select'; options?: string[]; value: string }[],
         callback: (values: Record<string, string>) => void
     ): void {
+        if (this.input.keyboard) {
+            this.input.keyboard.enabled = false;
+        }
+
         const overlay = document.createElement('div');
         overlay.style.position = 'fixed';
         overlay.style.top = '0';
@@ -1204,6 +1246,9 @@ export class EditorScene extends Phaser.Scene {
                     }
                     selectEl.appendChild(optEl);
                 });
+                ['keydown', 'keyup', 'keypress'].forEach(evt => {
+                    selectEl.addEventListener(evt, e => e.stopPropagation());
+                });
                 fieldWrapper.appendChild(selectEl);
                 inputs[field.key] = selectEl;
             } else {
@@ -1217,6 +1262,9 @@ export class EditorScene extends Phaser.Scene {
                 inputEl.style.color = '#ffffff';
                 inputEl.style.outline = 'none';
                 inputEl.style.fontSize = '14px';
+                ['keydown', 'keyup', 'keypress'].forEach(evt => {
+                    inputEl.addEventListener(evt, e => e.stopPropagation());
+                });
                 fieldWrapper.appendChild(inputEl);
                 inputs[field.key] = inputEl;
             }
@@ -1242,6 +1290,9 @@ export class EditorScene extends Phaser.Scene {
         cancelBtn.style.transition = 'all 0.2s';
         cancelBtn.onclick = () => {
             document.body.removeChild(overlay);
+            if (this.input.keyboard) {
+                this.input.keyboard.enabled = true;
+            }
         };
         btnWrapper.appendChild(cancelBtn);
 
@@ -1265,6 +1316,9 @@ export class EditorScene extends Phaser.Scene {
                 res[k] = inputs[k].value;
             });
             document.body.removeChild(overlay);
+            if (this.input.keyboard) {
+                this.input.keyboard.enabled = true;
+            }
             callback(res);
         };
 
@@ -1534,6 +1588,171 @@ export class EditorScene extends Phaser.Scene {
         }
     }
 
+    private startDragging(pointer: Phaser.Input.Pointer): void {
+        if (pointer.x >= 674) return;
+
+        const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+        const tileX = Math.floor(worldPoint.x / TILE_SIZE);
+        const tileY = Math.floor(worldPoint.y / TILE_SIZE);
+
+        const w = this.levelData.meta.width;
+        const h = this.levelData.meta.height;
+        if (tileX < 0 || tileX >= w || tileY < 0 || tileY >= h) return;
+
+        this.dragStartX = tileX;
+        this.dragStartY = tileY;
+        const idx = tileY * w + tileX;
+
+        // 1. Check for entity first
+        const entity = this.levelData.entities.find(e => e.x === tileX && e.y === tileY);
+        if (entity) {
+            this.dragEntity = entity;
+            this.isDragging = true;
+
+            const labels: Record<string, string> = {
+                humanSpawn: 'H', dogSpawn: 'D', exitDoor: 'DR', crate: 'CR', key: 'KY',
+                checkpoint: 'CP', ladder: 'LD', button: 'BT', gate: 'GT', launcher: 'LN',
+                cat: 'CT', sign: 'SN', spikes: 'SP', movingPlatform: 'MP'
+            };
+            const label = labels[entity.type] || '?';
+            this.dragPreviewText = this.add.text(worldPoint.x, worldPoint.y, label, {
+                fontFamily: '"Press Start 2P"',
+                fontSize: '8px',
+                color: '#ffffff'
+            }).setOrigin(0.5).setDepth(100);
+            this.workspaceGroup.add(this.dragPreviewText);
+            this.uiCamera.ignore(this.dragPreviewText);
+
+            const key = `${tileX},${tileY}`;
+            const originalVisual = this.entityVisuals.get(key);
+            if (originalVisual) {
+                originalVisual.setVisible(false);
+            }
+            this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.5 } as any);
+            return;
+        }
+
+        // 2. Check for terrain tile
+        const terrVal = this.levelData.layers.terrain[idx];
+        if (terrVal >= 0) {
+            this.dragTileValue = terrVal;
+            this.dragTileLayer = 'terrain';
+            this.isDragging = true;
+
+            const config = this.getTileConfig(terrVal);
+            this.dragPreviewSprite = this.add.sprite(worldPoint.x, worldPoint.y, config.texture, config.frame);
+            this.dragPreviewSprite.setScale(config.scale).setDepth(100).setAlpha(0.7);
+            this.workspaceGroup.add(this.dragPreviewSprite);
+            this.uiCamera.ignore(this.dragPreviewSprite);
+
+            this.terrainLayer.removeTileAt(tileX, tileY);
+            this.levelData.layers.terrain[idx] = -1;
+            this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.2 } as any);
+            return;
+        }
+
+        // 3. Check for background tile
+        const bgVal = this.levelData.layers.background[idx];
+        if (bgVal >= 0) {
+            this.dragTileValue = bgVal;
+            this.dragTileLayer = 'background';
+            this.isDragging = true;
+
+            const config = this.getTileConfig(bgVal);
+            this.dragPreviewSprite = this.add.sprite(worldPoint.x, worldPoint.y, config.texture, config.frame);
+            this.dragPreviewSprite.setScale(config.scale).setDepth(100).setAlpha(0.7);
+            this.workspaceGroup.add(this.dragPreviewSprite);
+            this.uiCamera.ignore(this.dragPreviewSprite);
+
+            this.bgLayer.removeTileAt(tileX, tileY);
+            this.levelData.layers.background[idx] = -1;
+            this.removeBgOverlay(tileX, tileY);
+            this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.2 } as any);
+            return;
+        }
+    }
+
+    private updateDragging(pointer: Phaser.Input.Pointer): void {
+        if (!this.isDragging) return;
+
+        const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+
+        if (this.dragPreviewSprite) {
+            this.dragPreviewSprite.setPosition(worldPoint.x, worldPoint.y);
+        }
+        if (this.dragPreviewText) {
+            this.dragPreviewText.setPosition(worldPoint.x, worldPoint.y);
+        }
+    }
+
+    private stopDragging(pointer: Phaser.Input.Pointer): void {
+        if (!this.isDragging) return;
+
+        const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+        const tileX = Math.floor(worldPoint.x / TILE_SIZE);
+        const tileY = Math.floor(worldPoint.y / TILE_SIZE);
+
+        const w = this.levelData.meta.width;
+        const h = this.levelData.meta.height;
+
+        let dropped = false;
+        if (tileX >= 0 && tileX < w && tileY >= 0 && tileY < h) {
+            const destIdx = tileY * w + tileX;
+
+            if (this.dragEntity) {
+                this.removeEntityAt(tileX, tileY);
+                this.dragEntity.x = tileX;
+                this.dragEntity.y = tileY;
+                dropped = true;
+                this.selectedEntity = this.dragEntity;
+            } else if (this.dragTileLayer === 'terrain') {
+                this.levelData.layers.terrain[destIdx] = this.dragTileValue;
+                dropped = true;
+            } else if (this.dragTileLayer === 'background') {
+                this.levelData.layers.background[destIdx] = this.dragTileValue;
+                dropped = true;
+            }
+        }
+
+        if (!dropped) {
+            if (this.dragEntity) {
+                const key = `${this.dragStartX},${this.dragStartY}`;
+                const originalVisual = this.entityVisuals.get(key);
+                if (originalVisual) {
+                    originalVisual.setVisible(true);
+                }
+            } else if (this.dragTileLayer === 'terrain') {
+                const srcIdx = this.dragStartY * w + this.dragStartX;
+                this.levelData.layers.terrain[srcIdx] = this.dragTileValue;
+            } else if (this.dragTileLayer === 'background') {
+                const srcIdx = this.dragStartY * w + this.dragStartX;
+                this.levelData.layers.background[srcIdx] = this.dragTileValue;
+            }
+        }
+
+        if (this.dragPreviewSprite) {
+            this.dragPreviewSprite.destroy();
+            this.dragPreviewSprite = null;
+        }
+        if (this.dragPreviewText) {
+            this.dragPreviewText.destroy();
+            this.dragPreviewText = null;
+        }
+
+        this.isDragging = false;
+        this.dragEntity = null;
+        this.dragTileValue = -1;
+        this.dragTileLayer = null;
+
+        this.createWorkspaceTilemap();
+        this.entityVisuals.forEach(v => v.destroy());
+        this.entityVisuals.clear();
+        this.levelData.entities.forEach(ent => this.drawEntityVisual(ent));
+        this.updateSelectedEntityUI();
+
+        this.sound.play('sfx_checkpoint', { volume: 0.2 });
+    }
+
     private loadTileTags(): void {
         const defaultTags: Record<string, number[]> = {
             background: Array.from({ length: 24 }, (_, i) => 180 + i)
@@ -1589,6 +1808,10 @@ export class EditorScene extends Phaser.Scene {
     }
 
     private showTagManager(): void {
+        if (this.input.keyboard) {
+            this.input.keyboard.enabled = false;
+        }
+
         const overlay = document.createElement('div');
         overlay.style.position = 'fixed';
         overlay.style.top = '0';
@@ -1638,6 +1861,9 @@ export class EditorScene extends Phaser.Scene {
         closeBtn.style.cursor = 'pointer';
         closeBtn.onclick = () => {
             document.body.removeChild(overlay);
+            if (this.input.keyboard) {
+                this.input.keyboard.enabled = true;
+            }
             this.saveTileTags();
             this.buildPaletteUI();
         };
@@ -1674,6 +1900,9 @@ export class EditorScene extends Phaser.Scene {
         tagInput.style.color = '#ffffff';
         tagInput.style.fontSize = '12px';
         tagInput.style.outline = 'none';
+        ['keydown', 'keyup', 'keypress'].forEach(evt => {
+            tagInput.addEventListener(evt, e => e.stopPropagation());
+        });
 
         const addBtn = document.createElement('button');
         addBtn.innerText = '+ ADD';
@@ -1743,6 +1972,9 @@ export class EditorScene extends Phaser.Scene {
         saveCloseBtn.style.fontSize = '14px';
         saveCloseBtn.onclick = () => {
             document.body.removeChild(overlay);
+            if (this.input.keyboard) {
+                this.input.keyboard.enabled = true;
+            }
             this.saveTileTags();
             this.buildPaletteUI();
         };
