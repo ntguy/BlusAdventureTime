@@ -57,6 +57,18 @@ export class EditorScene extends Phaser.Scene {
     private editPropsButton!: Phaser.GameObjects.Text;
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
     private wasdKeys!: any;
+    private selectedWorkspaceItems: {
+        type: 'entity' | 'terrain' | 'background';
+        x: number;
+        y: number;
+        value: any;
+    }[] = [];
+    private selectionHighlightGraphics!: Phaser.GameObjects.Graphics;
+    private dragPreviews: {
+        gameObject: Phaser.GameObjects.Sprite | Phaser.GameObjects.Text;
+        offsetGridX: number;
+        offsetGridY: number;
+    }[] = [];
     private gridButtons: Phaser.GameObjects.Text[] = [];
 
     private entityPalette = [
@@ -67,7 +79,9 @@ export class EditorScene extends Phaser.Scene {
         { label: 'KY', type: 'key', color: '#ffff00', name: 'KEY' },
         { label: 'CP', type: 'checkpoint', color: '#0055ff', name: 'CHECKPOINT' },
         { label: 'LD', type: 'ladder', color: '#a8a8a8', name: 'LADDER' },
-        { label: 'BT', type: 'button', color: '#ff5555', name: 'BUTTON/LEVER' },
+        { label: 'BT', type: 'button', color: '#ff5555', name: 'BUTTON' },
+        { label: 'LV', type: 'lever', color: '#ff33aa', name: 'LEVER' },
+        { label: 'FL', type: 'flying', color: '#a233ff', name: 'FLYING ENTITY' },
         { label: 'GT', type: 'gate', color: '#ffaa00', name: 'GATE' },
         { label: 'LN', type: 'launcher', color: '#ff00aa', name: 'LAUNCHER' },
         { label: 'CT', type: 'cat', color: '#ff55ff', name: 'CAT' },
@@ -115,6 +129,9 @@ export class EditorScene extends Phaser.Scene {
         this.gridGraphics = this.add.graphics();
         this.workspaceGroup.add(this.gridGraphics);
         this.drawGrid();
+
+        this.selectionHighlightGraphics = this.add.graphics();
+        this.workspaceGroup.add(this.selectionHighlightGraphics);
 
         // Load tile tags
         this.loadTileTags();
@@ -258,6 +275,11 @@ export class EditorScene extends Phaser.Scene {
         this.workspaceGroup.add(this.bgLayer);
         this.workspaceGroup.add(this.terrainLayer);
 
+        if (this.uiCamera) {
+            this.uiCamera.ignore(this.bgLayer);
+            this.uiCamera.ignore(this.terrainLayer);
+        }
+
         this.cameras.main.setBackgroundColor('#1a1a2e');
 
         const width = this.levelData.meta.width;
@@ -306,12 +328,14 @@ export class EditorScene extends Phaser.Scene {
             checkpoint: { t: 'CP', c: '#0055ff' },
             ladder: { t: 'LD', c: '#a8a8a8' },
             button: { t: 'BT', c: '#ff5555' },
+            lever: { t: 'LV', c: '#ff33aa' },
             gate: { t: 'GT', c: '#ffaa00' },
             launcher: { t: 'LN', c: '#ff00aa' },
             cat: { t: 'CT', c: '#ff55ff' },
             sign: { t: 'SN', c: '#e2a76f' },
             spikes: { t: 'SP', c: '#ff3333' },
-            movingPlatform: { t: 'MP', c: '#44aaff' }
+            movingPlatform: { t: 'MP', c: '#44aaff' },
+            flying: { t: 'FL', c: '#a233ff' }
         };
 
         const config = labels[ent.type] || { t: '?', c: '#ffffff' };
@@ -322,6 +346,12 @@ export class EditorScene extends Phaser.Scene {
         if (ent.type === 'button') {
             const ch = props.channel || '1';
             labelText = `B${ch}`;
+        } else if (ent.type === 'lever') {
+            const ch = props.channel || '1';
+            labelText = `L${ch}`;
+        } else if (ent.type === 'flying') {
+            const startFrame = props.startFrame !== undefined ? props.startFrame : 120;
+            labelText = `F${startFrame}`;
         } else if (ent.type === 'gate') {
             const lCh = props.listenChannel || '1';
             labelText = `G${lCh}`;
@@ -337,8 +367,8 @@ export class EditorScene extends Phaser.Scene {
         this.uiCamera.ignore(txt); // prevent rendering on UI Camera
         this.entityVisuals.set(key, txt);
 
-        // Draw movement path arrow for moving platforms
-        if (ent.type === 'movingPlatform') {
+        // Draw movement path arrow for moving platforms and flying entities
+        if (ent.type === 'movingPlatform' || ent.type === 'flying') {
             const props = ent.properties || {};
             const endTileX = props.endX !== undefined ? Number(props.endX) : ent.x;
             const endTileY = props.endY !== undefined ? Number(props.endY) : ent.y;
@@ -346,7 +376,8 @@ export class EditorScene extends Phaser.Scene {
                 const startPx = { x: ent.x * 18 + 9, y: ent.y * 18 + 9 };
                 const endPx = { x: endTileX * 18 + 9, y: endTileY * 18 + 9 };
                 const arrow = this.add.graphics();
-                arrow.lineStyle(1, 0x44aaff, 0.6);
+                const pathColor = ent.type === 'flying' ? 0xa233ff : 0x44aaff;
+                arrow.lineStyle(1, pathColor, 0.6);
                 // Draw dashed line
                 const dx = endPx.x - startPx.x;
                 const dy = endPx.y - startPx.y;
@@ -851,8 +882,29 @@ export class EditorScene extends Phaser.Scene {
     private setTool(tool: 'terrain' | 'bg' | 'erase' | 'move'): void {
         if (this.activeTool === tool) return;
         this.activeTool = tool;
+        if (tool !== 'move') {
+            this.selectedWorkspaceItems = [];
+            this.drawSelectionHighlights();
+        }
         this.updateSelectionHighlights();
         this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.3 } as any);
+    }
+
+    private drawSelectionHighlights(): void {
+        if (!this.selectionHighlightGraphics) return;
+        this.selectionHighlightGraphics.clear();
+        if (this.selectedWorkspaceItems.length === 0) return;
+
+        this.selectionHighlightGraphics.lineStyle(2, 0xff00ff, 0.9);
+        this.selectionHighlightGraphics.fillStyle(0xff00ff, 0.15);
+        this.selectionHighlightGraphics.setDepth(99);
+
+        for (const item of this.selectedWorkspaceItems) {
+            const px = item.x * TILE_SIZE;
+            const py = item.y * TILE_SIZE;
+            this.selectionHighlightGraphics.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+            this.selectionHighlightGraphics.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
+        }
     }
 
     private playtestLevel(): void {
@@ -903,30 +955,223 @@ export class EditorScene extends Phaser.Scene {
             if (!listRes.ok) throw new Error("Failed to get level list");
             
             const list: string[] = await listRes.json();
-            if (list.length === 0) {
-                alert("No custom levels found to load.");
-                return;
-            }
-
-            const selection = prompt(`Available levels:\n${list.join('\n')}\n\nEnter level name to load:`);
-            if (!selection) return;
-
-            const cleanSelection = selection.trim();
-            if (!list.includes(cleanSelection)) {
-                alert(`Level "${cleanSelection}" not found.`);
-                return;
-            }
-
-            const dataRes = await fetch(`/assets/levels/${cleanSelection}.json`);
-            if (!dataRes.ok) throw new Error(`Failed to load levels/${cleanSelection}.json`);
-
-            const levelData = await dataRes.json() as LevelData;
-            this.sound.play('sfx_checkpoint', { volume: 0.3 });
-            this.scene.start('EditorScene', { levelData });
-
+            this.showLevelSelectorModal(list);
         } catch (err: any) {
             alert(`ERROR: Failed to load: ${err.message}`);
         }
+    }
+
+    private showLevelSelectorModal(initialList: string[]): void {
+        if (this.input.keyboard) {
+            this.input.keyboard.enabled = false;
+        }
+
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100vw';
+        overlay.style.height = '100vh';
+        overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
+        overlay.style.display = 'flex';
+        overlay.style.justifyContent = 'center';
+        overlay.style.alignItems = 'center';
+        overlay.style.zIndex = '99999';
+        overlay.style.fontFamily = "'Outfit', 'Inter', sans-serif";
+
+        const container = document.createElement('div');
+        container.style.backgroundColor = '#0e0e12';
+        container.style.border = '2px solid #00ffff';
+        container.style.borderRadius = '12px';
+        container.style.padding = '24px';
+        container.style.width = '600px';
+        container.style.maxHeight = '80vh';
+        container.style.display = 'flex';
+        container.style.flexDirection = 'column';
+        container.style.boxShadow = '0 0 20px rgba(0, 255, 255, 0.3)';
+        container.style.color = '#ffffff';
+
+        const header = document.createElement('div');
+        header.style.display = 'flex';
+        header.style.justifyContent = 'space-between';
+        header.style.alignItems = 'center';
+        header.style.borderBottom = '1px solid #222233';
+        header.style.paddingBottom = '12px';
+        header.style.marginBottom = '16px';
+
+        const titleEl = document.createElement('h3');
+        titleEl.innerText = '📂 SELECT LEVEL';
+        titleEl.style.margin = '0';
+        titleEl.style.color = '#00ffff';
+        titleEl.style.fontSize = '22px';
+        titleEl.style.fontWeight = 'bold';
+        header.appendChild(titleEl);
+
+        const closeBtn = document.createElement('button');
+        closeBtn.innerText = '✕';
+        closeBtn.style.background = 'transparent';
+        closeBtn.style.border = 'none';
+        closeBtn.style.color = '#00ffff';
+        closeBtn.style.fontSize = '24px';
+        closeBtn.style.cursor = 'pointer';
+        closeBtn.style.transition = 'color 0.2s';
+        closeBtn.onmouseover = () => { closeBtn.style.color = '#ffffff'; };
+        closeBtn.onmouseout = () => { closeBtn.style.color = '#00ffff'; };
+        closeBtn.onclick = () => {
+            document.body.removeChild(overlay);
+            if (this.input.keyboard) {
+                this.input.keyboard.enabled = true;
+            }
+        };
+        header.appendChild(closeBtn);
+        container.appendChild(header);
+
+        const listContainer = document.createElement('div');
+        listContainer.style.flex = '1';
+        listContainer.style.overflowY = 'auto';
+        listContainer.style.display = 'flex';
+        listContainer.style.flexDirection = 'column';
+        listContainer.style.gap = '12px';
+        listContainer.style.paddingRight = '8px';
+
+        // Scrollbar customization
+        listContainer.style.scrollbarWidth = 'thin';
+        listContainer.style.scrollbarColor = '#00ffff #1a1a24';
+
+        const renderList = (levels: string[]) => {
+            listContainer.innerHTML = '';
+            if (levels.length === 0) {
+                const emptyMsg = document.createElement('div');
+                emptyMsg.innerText = 'No custom levels found.';
+                emptyMsg.style.textAlign = 'center';
+                emptyMsg.style.color = '#888899';
+                emptyMsg.style.padding = '40px 0';
+                listContainer.appendChild(emptyMsg);
+                return;
+            }
+
+            levels.forEach(levelName => {
+                const card = document.createElement('div');
+                card.style.backgroundColor = '#161622';
+                card.style.border = '1px solid #2e2e3e';
+                card.style.borderRadius = '8px';
+                card.style.padding = '12px 16px';
+                card.style.display = 'flex';
+                card.style.justifyContent = 'space-between';
+                card.style.alignItems = 'center';
+                card.style.transition = 'all 0.2s';
+                card.onmouseover = () => {
+                    card.style.borderColor = '#00ffff';
+                    card.style.backgroundColor = '#1c1c2e';
+                };
+                card.onmouseout = () => {
+                    card.style.borderColor = '#2e2e3e';
+                    card.style.backgroundColor = '#161622';
+                };
+
+                const nameLabel = document.createElement('span');
+                nameLabel.innerText = levelName;
+                nameLabel.style.fontSize = '16px';
+                nameLabel.style.fontWeight = '500';
+                nameLabel.style.color = '#ffffff';
+                nameLabel.style.cursor = 'pointer';
+                nameLabel.onclick = () => loadAction(levelName);
+                card.appendChild(nameLabel);
+
+                const btnGroup = document.createElement('div');
+                btnGroup.style.display = 'flex';
+                btnGroup.style.gap = '8px';
+
+                const loadBtn = document.createElement('button');
+                loadBtn.innerText = 'LOAD';
+                loadBtn.style.backgroundColor = '#00ffff';
+                loadBtn.style.color = '#000000';
+                loadBtn.style.border = 'none';
+                loadBtn.style.borderRadius = '4px';
+                loadBtn.style.padding = '6px 12px';
+                loadBtn.style.fontWeight = 'bold';
+                loadBtn.style.cursor = 'pointer';
+                loadBtn.style.transition = 'opacity 0.2s';
+                loadBtn.onmouseover = () => { loadBtn.style.opacity = '0.8'; };
+                loadBtn.onmouseout = () => { loadBtn.style.opacity = '1'; };
+                loadBtn.onclick = () => loadAction(levelName);
+                btnGroup.appendChild(loadBtn);
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.innerText = '🗑️';
+                deleteBtn.style.backgroundColor = '#ff3355';
+                deleteBtn.style.color = '#ffffff';
+                deleteBtn.style.border = 'none';
+                deleteBtn.style.borderRadius = '4px';
+                deleteBtn.style.padding = '6px 10px';
+                deleteBtn.style.cursor = 'pointer';
+                deleteBtn.style.transition = 'opacity 0.2s';
+                deleteBtn.onmouseover = () => { deleteBtn.style.opacity = '0.8'; };
+                deleteBtn.onmouseout = () => { deleteBtn.style.opacity = '1'; };
+                deleteBtn.onclick = () => deleteAction(levelName);
+                btnGroup.appendChild(deleteBtn);
+
+                card.appendChild(btnGroup);
+                card.style.cursor = 'pointer';
+                card.onclick = (e) => {
+                    if (e.target === card || e.target === nameLabel) {
+                        loadAction(levelName);
+                    }
+                };
+                listContainer.appendChild(card);
+            });
+        };
+
+        const loadAction = async (name: string) => {
+            try {
+                const dataRes = await fetch(`/assets/levels/${name}.json`);
+                if (!dataRes.ok) throw new Error(`Failed to load levels/${name}.json`);
+
+                const levelData = await dataRes.json() as LevelData;
+                document.body.removeChild(overlay);
+                if (this.input.keyboard) {
+                    this.input.keyboard.enabled = true;
+                }
+                this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                this.scene.start('EditorScene', { levelData });
+            } catch (err: any) {
+                alert(`ERROR: Failed to load: ${err.message}`);
+            }
+        };
+
+        const deleteAction = async (name: string) => {
+            const confirmed = confirm(`Are you absolutely sure you want to delete the level "${name}"?\nThis action cannot be undone.`);
+            if (!confirmed) return;
+
+            // Extra security confirmation to avoid any misclicks: user must type "delete" to confirm
+            const doubleConfirmed = prompt(`To confirm deletion, please type "DELETE" below (case-sensitive):`);
+            if (doubleConfirmed !== 'DELETE') {
+                alert('Deletion cancelled (validation text did not match).');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/levels/${name}`, { method: 'DELETE' });
+                if (!res.ok) throw new Error('Delete request failed');
+
+                this.sound.play('sfx_death', { volume: 0.3 } as any);
+                alert(`SUCCESS: Level "${name}" has been deleted.`);
+                
+                // Fetch updated list and re-render
+                const listRes = await fetch('/api/levels');
+                if (listRes.ok) {
+                    const list: string[] = await listRes.json();
+                    renderList(list);
+                }
+            } catch (err: any) {
+                alert(`ERROR: Failed to delete: ${err.message}`);
+            }
+        };
+
+        renderList(initialList);
+        container.appendChild(listContainer);
+        overlay.appendChild(container);
+        document.body.appendChild(overlay);
     }
 
     private clearToNewLevel(): void {
@@ -979,16 +1224,31 @@ export class EditorScene extends Phaser.Scene {
 
         if (ent.type === 'button') {
             const ch = props.channel || '1';
-            const tType = props.triggerType || 'pressure';
-            const vType = props.visualType || 'button';
             const lCh = props.listenChannel ? `\nListen: ${props.listenChannel}` : '';
             const glow = props.glowColor ? `\nGlow: ${props.glowColor}` : '';
-            this.selectedEntityText.setText(`Selected: ${name}\nChannel: ${ch}\nMode: ${tType} (${vType})${lCh}${glow}`);
+            this.selectedEntityText.setText(`Selected: ${name}\nChannel: ${ch}${lCh}${glow}`);
             this.selectedEntityText.setColor('#ff5555');
+            this.editPropsButton.setVisible(true);
+        } else if (ent.type === 'lever') {
+            const ch = props.channel || '1';
+            const lCh = props.listenChannel ? `\nListen: ${props.listenChannel}` : '';
+            const glow = props.glowColor ? `\nGlow: ${props.glowColor}` : '';
+            this.selectedEntityText.setText(`Selected: ${name}\nChannel: ${ch}${lCh}${glow}`);
+            this.selectedEntityText.setColor('#ff33aa');
+            this.editPropsButton.setVisible(true);
+        } else if (ent.type === 'flying') {
+            const startFrame = props.startFrame !== undefined ? props.startFrame : 120;
+            const endX = props.endX !== undefined ? props.endX : ent.x;
+            const endY = props.endY !== undefined ? props.endY : ent.y;
+            const vel = props.velocity || 60;
+            this.selectedEntityText.setText(`Selected: ${name}\nFrame: ${startFrame}\nEnd: ${endX},${endY}\nVel: ${vel}`);
+            this.selectedEntityText.setColor('#a233ff');
             this.editPropsButton.setVisible(true);
         } else if (ent.type === 'gate') {
             const lCh = props.listenChannel || '1';
-            this.selectedEntityText.setText(`Selected: ${name}\nListen Ch: ${lCh}`);
+            const tileGid = props.tileGid !== undefined ? props.tileGid : 150;
+            const glow = props.glowColor ? `\nGlow: ${props.glowColor}` : '';
+            this.selectedEntityText.setText(`Selected: ${name}\nListen Ch: ${lCh}\nTile GID: ${tileGid}${glow}`);
             this.selectedEntityText.setColor('#ffaa00');
             this.editPropsButton.setVisible(true);
         } else if (ent.type === 'sign') {
@@ -1026,11 +1286,24 @@ export class EditorScene extends Phaser.Scene {
                 const ch = prompt("Enter Output Trigger Channel (e.g. 1, gate_a):", String(props.channel || "1"));
                 if (ch === null) return;
 
-                const tType = prompt("Enter Trigger Type (interact or pressure):", String(props.triggerType || "pressure"));
-                if (tType === null) return;
+                const lCh = prompt("Enter optional Listen Channel (e.g. gravity_flip, or leave empty):", String(props.listenChannel || ""));
+                if (lCh === null) return;
 
-                const vType = prompt("Enter Visual Type (button or lever):", String(props.visualType || "button"));
-                if (vType === null) return;
+                const glowColor = prompt("Enter Glow Color (hex, e.g. 0xff5500, or leave empty):", String(props.glowColor || ""));
+                if (glowColor === null) return;
+
+                ent.properties = {
+                    channel: ch.trim() || "1",
+                    listenChannel: lCh.trim() ? lCh.trim() : undefined,
+                    glowColor: glowColor.trim() ? glowColor.trim() : undefined
+                };
+
+                this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                this.updateSelectedEntityUI();
+                this.createWorkspaceTilemap();
+            } else if (ent.type === 'lever') {
+                const ch = prompt("Enter Output Trigger Channel (e.g. 1, gate_a):", String(props.channel || "1"));
+                if (ch === null) return;
 
                 const lCh = prompt("Enter optional Listen Channel (e.g. gravity_flip, or leave empty):", String(props.listenChannel || ""));
                 if (lCh === null) return;
@@ -1040,10 +1313,28 @@ export class EditorScene extends Phaser.Scene {
 
                 ent.properties = {
                     channel: ch.trim() || "1",
-                    triggerType: tType.trim() === "interact" ? "interact" : "pressure",
-                    visualType: vType.trim() === "lever" ? "lever" : "button",
                     listenChannel: lCh.trim() ? lCh.trim() : undefined,
                     glowColor: glowColor.trim() ? glowColor.trim() : undefined
+                };
+
+                this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                this.updateSelectedEntityUI();
+                this.createWorkspaceTilemap();
+            } else if (ent.type === 'flying') {
+                const startFrame = prompt("Enter Start Frame Index (for 3-frame anim):", String(props.startFrame !== undefined ? props.startFrame : 120));
+                if (startFrame === null) return;
+                const endX = prompt("Enter End Tile X:", String(props.endX !== undefined ? props.endX : ent.x));
+                if (endX === null) return;
+                const endY = prompt("Enter End Tile Y:", String(props.endY !== undefined ? props.endY : ent.y));
+                if (endY === null) return;
+                const velocity = prompt("Enter Velocity (px/s):", String(props.velocity || 60));
+                if (velocity === null) return;
+
+                ent.properties = {
+                    startFrame: parseInt(startFrame.trim()) || 120,
+                    endX: parseInt(endX.trim()) || ent.x,
+                    endY: parseInt(endY.trim()) || ent.y,
+                    velocity: parseInt(velocity.trim()) || 60
                 };
 
                 this.sound.play('sfx_checkpoint', { volume: 0.3 });
@@ -1052,9 +1343,15 @@ export class EditorScene extends Phaser.Scene {
             } else if (ent.type === 'gate') {
                 const lCh = prompt("Enter Listen Channel (e.g. 1, gate_a):", String(props.listenChannel || "1"));
                 if (lCh === null) return;
+                const tileGid = prompt("Enter Tile GID (visual frame index):", String(props.tileGid !== undefined ? props.tileGid : 150));
+                if (tileGid === null) return;
+                const glowColor = prompt("Enter Glow Color (hex, e.g. 0xff5500, or leave empty):", String(props.glowColor || ""));
+                if (glowColor === null) return;
 
                 ent.properties = {
-                    listenChannel: lCh.trim() || "1"
+                    listenChannel: lCh.trim() || "1",
+                    tileGid: parseInt(tileGid.trim()) || 150,
+                    glowColor: glowColor.trim() ? glowColor.trim() : undefined
                 };
 
                 this.sound.play('sfx_checkpoint', { volume: 0.3 });
@@ -1104,17 +1401,13 @@ export class EditorScene extends Phaser.Scene {
         } else {
             // UNIFIED FORM SYSTEM FOR REAL PLAYERS
             if (ent.type === 'button') {
-                this.showPropertyForm("Button / Lever Properties", [
+                this.showPropertyForm("Button Properties", [
                     { key: 'channel', label: 'Output Trigger Channel', type: 'text', value: String(props.channel || "1") },
-                    { key: 'triggerType', label: 'Trigger Type', type: 'select', options: ['pressure', 'interact'], value: String(props.triggerType || "pressure") },
-                    { key: 'visualType', label: 'Visual Type', type: 'select', options: ['button', 'lever'], value: String(props.visualType || "button") },
                     { key: 'listenChannel', label: 'Listen Channel (Optional)', type: 'text', value: String(props.listenChannel || "") },
                     { key: 'glowColor', label: 'Glow Color (hex, e.g. 0xff5500, or leave empty)', type: 'text', value: String(props.glowColor || "") }
                 ], (values) => {
                     ent.properties = {
                         channel: values.channel.trim() || "1",
-                        triggerType: values.triggerType as 'interact' | 'pressure',
-                        visualType: values.visualType as 'button' | 'lever',
                         listenChannel: values.listenChannel.trim() ? values.listenChannel.trim() : undefined,
                         glowColor: values.glowColor.trim() ? values.glowColor.trim() : undefined
                     };
@@ -1122,12 +1415,48 @@ export class EditorScene extends Phaser.Scene {
                     this.updateSelectedEntityUI();
                     this.createWorkspaceTilemap();
                 });
-            } else if (ent.type === 'gate') {
-                this.showPropertyForm("Gate Properties", [
-                    { key: 'listenChannel', label: 'Listen Channel', type: 'text', value: String(props.listenChannel || "1") }
+            } else if (ent.type === 'lever') {
+                this.showPropertyForm("Lever Properties", [
+                    { key: 'channel', label: 'Output Trigger Channel', type: 'text', value: String(props.channel || "1") },
+                    { key: 'listenChannel', label: 'Listen Channel (Optional)', type: 'text', value: String(props.listenChannel || "") },
+                    { key: 'glowColor', label: 'Glow Color (hex, e.g. 0xff5500, or leave empty)', type: 'text', value: String(props.glowColor || "") }
                 ], (values) => {
                     ent.properties = {
-                        listenChannel: values.listenChannel.trim() || "1"
+                        channel: values.channel.trim() || "1",
+                        listenChannel: values.listenChannel.trim() ? values.listenChannel.trim() : undefined,
+                        glowColor: values.glowColor.trim() ? values.glowColor.trim() : undefined
+                    };
+                    this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                    this.updateSelectedEntityUI();
+                    this.createWorkspaceTilemap();
+                });
+            } else if (ent.type === 'flying') {
+                this.showPropertyForm("Flying Entity Properties", [
+                    { key: 'startFrame', label: 'Start Frame Index (3-frame anim)', type: 'text', value: String(props.startFrame !== undefined ? props.startFrame : "120") },
+                    { key: 'endX', label: 'End Tile X', type: 'text', value: String(props.endX !== undefined ? props.endX : ent.x) },
+                    { key: 'endY', label: 'End Tile Y', type: 'text', value: String(props.endY !== undefined ? props.endY : ent.y) },
+                    { key: 'velocity', label: 'Velocity (px/s)', type: 'text', value: String(props.velocity || "60") }
+                ], (values) => {
+                    ent.properties = {
+                        startFrame: parseInt(values.startFrame.trim()) || 120,
+                        endX: parseInt(values.endX.trim()) || ent.x,
+                        endY: parseInt(values.endY.trim()) || ent.y,
+                        velocity: parseInt(values.velocity.trim()) || 60
+                    };
+                    this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                    this.updateSelectedEntityUI();
+                    this.createWorkspaceTilemap();
+                });
+            } else if (ent.type === 'gate') {
+                this.showPropertyForm("Gate Properties", [
+                    { key: 'listenChannel', label: 'Listen Channel', type: 'text', value: String(props.listenChannel || "1") },
+                    { key: 'tileGid', label: 'Tile GID (visual frame index)', type: 'text', value: String(props.tileGid !== undefined ? props.tileGid : "150") },
+                    { key: 'glowColor', label: 'Glow Color (hex, e.g. 0xff5500, or leave empty)', type: 'text', value: String(props.glowColor || "") }
+                ], (values) => {
+                    ent.properties = {
+                        listenChannel: values.listenChannel.trim() || "1",
+                        tileGid: parseInt(values.tileGid.trim()) || 150,
+                        glowColor: values.glowColor.trim() ? values.glowColor.trim() : undefined
                     };
                     this.sound.play('sfx_checkpoint', { volume: 0.3 });
                     this.updateSelectedEntityUI();
@@ -1599,76 +1928,162 @@ export class EditorScene extends Phaser.Scene {
         const h = this.levelData.meta.height;
         if (tileX < 0 || tileX >= w || tileY < 0 || tileY >= h) return;
 
-        this.dragStartX = tileX;
-        this.dragStartY = tileY;
-        const idx = tileY * w + tileX;
+        const isShiftHeld = pointer.event.shiftKey;
 
-        // 1. Check for entity first
-        const entity = this.levelData.entities.find(e => e.x === tileX && e.y === tileY);
-        if (entity) {
-            this.dragEntity = entity;
+        // If Shift is held: toggle selection of the clicked tile/entity
+        if (isShiftHeld) {
+            const idx = tileY * w + tileX;
+            const existingIdx = this.selectedWorkspaceItems.findIndex(item => item.x === tileX && item.y === tileY);
+            if (existingIdx >= 0) {
+                // Remove from selection
+                this.selectedWorkspaceItems.splice(existingIdx, 1);
+            } else {
+                // Find what is here (Entity -> Terrain -> BG)
+                const entity = this.levelData.entities.find(e => e.x === tileX && e.y === tileY);
+                if (entity) {
+                    this.selectedWorkspaceItems.push({ type: 'entity', x: tileX, y: tileY, value: entity });
+                } else {
+                    const terrVal = this.levelData.layers.terrain[idx];
+                    if (terrVal >= 0) {
+                        this.selectedWorkspaceItems.push({ type: 'terrain', x: tileX, y: tileY, value: terrVal });
+                    } else {
+                        const bgVal = this.levelData.layers.background[idx];
+                        if (bgVal >= 0) {
+                            this.selectedWorkspaceItems.push({ type: 'background', x: tileX, y: tileY, value: bgVal });
+                        }
+                    }
+                }
+            }
+            this.drawSelectionHighlights();
+            this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.4 } as any);
+            return;
+        }
+
+        // If Shift is NOT held:
+        // Check if the clicked tile is part of our selection
+        const inSelection = this.selectedWorkspaceItems.some(item => item.x === tileX && item.y === tileY);
+
+        if (inSelection) {
+            // Drag the entire selection!
+            this.dragStartX = tileX;
+            this.dragStartY = tileY;
             this.isDragging = true;
+            this.dragPreviews = [];
 
-            const labels: Record<string, string> = {
-                humanSpawn: 'H', dogSpawn: 'D', exitDoor: 'DR', crate: 'CR', key: 'KY',
-                checkpoint: 'CP', ladder: 'LD', button: 'BT', gate: 'GT', launcher: 'LN',
-                cat: 'CT', sign: 'SN', spikes: 'SP', movingPlatform: 'MP'
-            };
-            const label = labels[entity.type] || '?';
-            this.dragPreviewText = this.add.text(worldPoint.x, worldPoint.y, label, {
-                fontFamily: '"Press Start 2P"',
-                fontSize: '8px',
-                color: '#ffffff'
-            }).setOrigin(0.5).setDepth(100);
-            this.workspaceGroup.add(this.dragPreviewText);
-            this.uiCamera.ignore(this.dragPreviewText);
+            // For each item in the selection:
+            for (const item of this.selectedWorkspaceItems) {
+                const dx = item.x - tileX;
+                const dy = item.y - tileY;
+                const itemWorldX = item.x * TILE_SIZE + TILE_SIZE / 2;
+                const itemWorldY = item.y * TILE_SIZE + TILE_SIZE / 2;
 
-            const key = `${tileX},${tileY}`;
-            const originalVisual = this.entityVisuals.get(key);
-            if (originalVisual) {
-                originalVisual.setVisible(false);
+                if (item.type === 'entity') {
+                    const labels: Record<string, string> = {
+                        humanSpawn: 'H', dogSpawn: 'D', exitDoor: 'DR', crate: 'CR', key: 'KY',
+                        checkpoint: 'CP', ladder: 'LD', button: 'BT', gate: 'GT', launcher: 'LN',
+                        cat: 'CT', sign: 'SN', spikes: 'SP', movingPlatform: 'MP', flying: 'FL'
+                    };
+                    const label = labels[item.value.type] || '?';
+                    const txt = this.add.text(itemWorldX, itemWorldY, label, {
+                        fontFamily: '"Press Start 2P"',
+                        fontSize: '8px',
+                        color: '#ffffff'
+                    }).setOrigin(0.5).setDepth(100);
+                    this.workspaceGroup.add(txt);
+                    this.uiCamera.ignore(txt);
+                    this.dragPreviews.push({ gameObject: txt, offsetGridX: dx, offsetGridY: dy });
+
+                    // Hide original visual
+                    const originalVisual = this.entityVisuals.get(`${item.x},${item.y}`);
+                    if (originalVisual) originalVisual.setVisible(false);
+                } else {
+                    const config = this.getTileConfig(item.value);
+                    const sprite = this.add.sprite(itemWorldX, itemWorldY, config.texture, config.frame);
+                    sprite.setScale(config.scale).setDepth(100).setAlpha(0.7);
+                    this.workspaceGroup.add(sprite);
+                    this.uiCamera.ignore(sprite);
+                    this.dragPreviews.push({ gameObject: sprite, offsetGridX: dx, offsetGridY: dy });
+
+                    // Hide original tile from rendering during drag
+                    if (item.type === 'terrain') {
+                        this.terrainLayer.removeTileAt(item.x, item.y);
+                        this.levelData.layers.terrain[item.y * w + item.x] = -1;
+                    } else {
+                        this.bgLayer.removeTileAt(item.x, item.y);
+                        this.levelData.layers.background[item.y * w + item.x] = -1;
+                        this.removeBgOverlay(item.x, item.y);
+                    }
+                }
             }
             this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.5 } as any);
-            return;
-        }
+        } else {
+            // Clicked outside existing selection: Clear selection and do single drag
+            this.selectedWorkspaceItems = [];
+            this.drawSelectionHighlights();
 
-        // 2. Check for terrain tile
-        const terrVal = this.levelData.layers.terrain[idx];
-        if (terrVal >= 0) {
-            this.dragTileValue = terrVal;
-            this.dragTileLayer = 'terrain';
-            this.isDragging = true;
+            this.dragStartX = tileX;
+            this.dragStartY = tileY;
+            const idx = tileY * w + tileX;
 
-            const config = this.getTileConfig(terrVal);
-            this.dragPreviewSprite = this.add.sprite(worldPoint.x, worldPoint.y, config.texture, config.frame);
-            this.dragPreviewSprite.setScale(config.scale).setDepth(100).setAlpha(0.7);
-            this.workspaceGroup.add(this.dragPreviewSprite);
-            this.uiCamera.ignore(this.dragPreviewSprite);
+            const entity = this.levelData.entities.find(e => e.x === tileX && e.y === tileY);
+            if (entity) {
+                this.dragEntity = entity;
+                this.isDragging = true;
 
-            this.terrainLayer.removeTileAt(tileX, tileY);
-            this.levelData.layers.terrain[idx] = -1;
-            this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.2 } as any);
-            return;
-        }
+                const labels: Record<string, string> = {
+                    humanSpawn: 'H', dogSpawn: 'D', exitDoor: 'DR', crate: 'CR', key: 'KY',
+                    checkpoint: 'CP', ladder: 'LD', button: 'BT', gate: 'GT', launcher: 'LN',
+                    cat: 'CT', sign: 'SN', spikes: 'SP', movingPlatform: 'MP', flying: 'FL'
+                };
+                const label = labels[entity.type] || '?';
+                this.dragPreviewText = this.add.text(worldPoint.x, worldPoint.y, label, {
+                    fontFamily: '"Press Start 2P"',
+                    fontSize: '8px',
+                    color: '#ffffff'
+                }).setOrigin(0.5).setDepth(100);
+                this.workspaceGroup.add(this.dragPreviewText);
+                this.uiCamera.ignore(this.dragPreviewText);
 
-        // 3. Check for background tile
-        const bgVal = this.levelData.layers.background[idx];
-        if (bgVal >= 0) {
-            this.dragTileValue = bgVal;
-            this.dragTileLayer = 'background';
-            this.isDragging = true;
+                const key = `${tileX},${tileY}`;
+                const originalVisual = this.entityVisuals.get(key);
+                if (originalVisual) originalVisual.setVisible(false);
+                this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.5 } as any);
+            } else {
+                const terrVal = this.levelData.layers.terrain[idx];
+                if (terrVal >= 0) {
+                    this.dragTileValue = terrVal;
+                    this.dragTileLayer = 'terrain';
+                    this.isDragging = true;
 
-            const config = this.getTileConfig(bgVal);
-            this.dragPreviewSprite = this.add.sprite(worldPoint.x, worldPoint.y, config.texture, config.frame);
-            this.dragPreviewSprite.setScale(config.scale).setDepth(100).setAlpha(0.7);
-            this.workspaceGroup.add(this.dragPreviewSprite);
-            this.uiCamera.ignore(this.dragPreviewSprite);
+                    const config = this.getTileConfig(terrVal);
+                    this.dragPreviewSprite = this.add.sprite(worldPoint.x, worldPoint.y, config.texture, config.frame);
+                    this.dragPreviewSprite.setScale(config.scale).setDepth(100).setAlpha(0.7);
+                    this.workspaceGroup.add(this.dragPreviewSprite);
+                    this.uiCamera.ignore(this.dragPreviewSprite);
 
-            this.bgLayer.removeTileAt(tileX, tileY);
-            this.levelData.layers.background[idx] = -1;
-            this.removeBgOverlay(tileX, tileY);
-            this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.2 } as any);
-            return;
+                    this.terrainLayer.removeTileAt(tileX, tileY);
+                    this.levelData.layers.terrain[idx] = -1;
+                    this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.2 } as any);
+                } else {
+                    const bgVal = this.levelData.layers.background[idx];
+                    if (bgVal >= 0) {
+                        this.dragTileValue = bgVal;
+                        this.dragTileLayer = 'background';
+                        this.isDragging = true;
+
+                        const config = this.getTileConfig(bgVal);
+                        this.dragPreviewSprite = this.add.sprite(worldPoint.x, worldPoint.y, config.texture, config.frame);
+                        this.dragPreviewSprite.setScale(config.scale).setDepth(100).setAlpha(0.7);
+                        this.workspaceGroup.add(this.dragPreviewSprite);
+                        this.uiCamera.ignore(this.dragPreviewSprite);
+
+                        this.bgLayer.removeTileAt(tileX, tileY);
+                        this.levelData.layers.background[idx] = -1;
+                        this.removeBgOverlay(tileX, tileY);
+                        this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.2 } as any);
+                    }
+                }
+            }
         }
     }
 
@@ -1683,6 +2098,13 @@ export class EditorScene extends Phaser.Scene {
         if (this.dragPreviewText) {
             this.dragPreviewText.setPosition(worldPoint.x, worldPoint.y);
         }
+
+        // For multi-drag previews
+        for (const preview of this.dragPreviews) {
+            const px = worldPoint.x + preview.offsetGridX * TILE_SIZE;
+            const py = worldPoint.y + preview.offsetGridY * TILE_SIZE;
+            preview.gameObject.setPosition(px, py);
+        }
     }
 
     private stopDragging(pointer: Phaser.Input.Pointer): void {
@@ -1696,53 +2118,142 @@ export class EditorScene extends Phaser.Scene {
         const h = this.levelData.meta.height;
 
         let dropped = false;
-        if (tileX >= 0 && tileX < w && tileY >= 0 && tileY < h) {
-            const destIdx = tileY * w + tileX;
 
-            if (this.dragEntity) {
-                this.removeEntityAt(tileX, tileY);
-                this.dragEntity.x = tileX;
-                this.dragEntity.y = tileY;
-                dropped = true;
-                this.selectedEntity = this.dragEntity;
-            } else if (this.dragTileLayer === 'terrain') {
-                this.levelData.layers.terrain[destIdx] = this.dragTileValue;
-                dropped = true;
-            } else if (this.dragTileLayer === 'background') {
-                this.levelData.layers.background[destIdx] = this.dragTileValue;
-                dropped = true;
-            }
-        }
+        // If we were dragging a multi-selection
+        if (this.selectedWorkspaceItems.length > 0) {
+            const deltaX = tileX - this.dragStartX;
+            const deltaY = tileY - this.dragStartY;
 
-        if (!dropped) {
-            if (this.dragEntity) {
-                const key = `${this.dragStartX},${this.dragStartY}`;
-                const originalVisual = this.entityVisuals.get(key);
-                if (originalVisual) {
-                    originalVisual.setVisible(true);
+            // Check if ALL selected items will land within bounds
+            let allInBounds = true;
+            for (const item of this.selectedWorkspaceItems) {
+                const newX = item.x + deltaX;
+                const newY = item.y + deltaY;
+                if (newX < 0 || newX >= w || newY < 0 || newY >= h) {
+                    allInBounds = false;
+                    break;
                 }
-            } else if (this.dragTileLayer === 'terrain') {
-                const srcIdx = this.dragStartY * w + this.dragStartX;
-                this.levelData.layers.terrain[srcIdx] = this.dragTileValue;
-            } else if (this.dragTileLayer === 'background') {
-                const srcIdx = this.dragStartY * w + this.dragStartX;
-                this.levelData.layers.background[srcIdx] = this.dragTileValue;
             }
-        }
 
-        if (this.dragPreviewSprite) {
-            this.dragPreviewSprite.destroy();
-            this.dragPreviewSprite = null;
-        }
-        if (this.dragPreviewText) {
-            this.dragPreviewText.destroy();
-            this.dragPreviewText = null;
+            if (allInBounds && (deltaX !== 0 || deltaY !== 0)) {
+                // To prevent overwriting when moving elements, we extract their values first,
+                // then write them to their new locations.
+                
+                const oldSelection = [...this.selectedWorkspaceItems];
+                const entityMoves: { entity: any; newX: number; newY: number }[] = [];
+                const tileMoves: { type: 'terrain' | 'background'; value: number; newX: number; newY: number }[] = [];
+
+                for (const item of oldSelection) {
+                    const newX = item.x + deltaX;
+                    const newY = item.y + deltaY;
+                    if (item.type === 'entity') {
+                        entityMoves.push({ entity: item.value, newX, newY });
+                    } else {
+                        tileMoves.push({ type: item.type, value: item.value, newX, newY });
+                    }
+                }
+
+                // Clear old entity positions from visual tracking
+                for (const item of oldSelection) {
+                    if (item.type === 'entity') {
+                        this.removeEntityAt(item.x, item.y);
+                    }
+                }
+
+                // Place everything at the new locations
+                for (const m of entityMoves) {
+                    this.removeEntityAt(m.newX, m.newY);
+                    m.entity.x = m.newX;
+                    m.entity.y = m.newY;
+                    this.levelData.entities.push(m.entity);
+                }
+
+                for (const m of tileMoves) {
+                    const idx = m.newY * w + m.newX;
+                    if (m.type === 'terrain') {
+                        this.levelData.layers.terrain[idx] = m.value;
+                    } else {
+                        this.levelData.layers.background[idx] = m.value;
+                    }
+                }
+
+                // Update the selection list to the new positions
+                this.selectedWorkspaceItems = oldSelection.map(item => ({
+                    ...item,
+                    x: item.x + deltaX,
+                    y: item.y + deltaY
+                }));
+
+                dropped = true;
+            } else {
+                // Put tiles back to their original positions
+                for (const item of this.selectedWorkspaceItems) {
+                    const idx = item.y * w + item.x;
+                    if (item.type === 'terrain') {
+                        this.levelData.layers.terrain[idx] = item.value;
+                    } else if (item.type === 'background') {
+                        this.levelData.layers.background[idx] = item.value;
+                    }
+                }
+            }
+
+            // Cleanup preview objects
+            for (const preview of this.dragPreviews) {
+                preview.gameObject.destroy();
+            }
+            this.dragPreviews = [];
+        } else {
+            // Single dragging
+            if (tileX >= 0 && tileX < w && tileY >= 0 && tileY < h) {
+                const destIdx = tileY * w + tileX;
+
+                if (this.dragEntity) {
+                    this.removeEntityAt(tileX, tileY);
+                    this.dragEntity.x = tileX;
+                    this.dragEntity.y = tileY;
+                    dropped = true;
+                    this.selectedEntity = this.dragEntity;
+                } else if (this.dragTileLayer === 'terrain') {
+                    this.levelData.layers.terrain[destIdx] = this.dragTileValue;
+                    dropped = true;
+                } else if (this.dragTileLayer === 'background') {
+                    this.levelData.layers.background[destIdx] = this.dragTileValue;
+                    dropped = true;
+                }
+            }
+
+            if (!dropped) {
+                if (this.dragEntity) {
+                    const key = `${this.dragStartX},${this.dragStartY}`;
+                    const originalVisual = this.entityVisuals.get(key);
+                    if (originalVisual) {
+                        originalVisual.setVisible(true);
+                    }
+                } else if (this.dragTileLayer === 'terrain') {
+                    const srcIdx = this.dragStartY * w + this.dragStartX;
+                    this.levelData.layers.terrain[srcIdx] = this.dragTileValue;
+                } else if (this.dragTileLayer === 'background') {
+                    const srcIdx = this.dragStartY * w + this.dragStartX;
+                    this.levelData.layers.background[srcIdx] = this.dragTileValue;
+                }
+            }
+
+            if (this.dragPreviewSprite) {
+                this.dragPreviewSprite.destroy();
+                this.dragPreviewSprite = null;
+            }
+            if (this.dragPreviewText) {
+                this.dragPreviewText.destroy();
+                this.dragPreviewText = null;
+            }
+
+            this.dragEntity = null;
+            this.dragTileValue = -1;
+            this.dragTileLayer = null;
         }
 
         this.isDragging = false;
-        this.dragEntity = null;
-        this.dragTileValue = -1;
-        this.dragTileLayer = null;
+        this.drawSelectionHighlights();
 
         this.createWorkspaceTilemap();
         this.entityVisuals.forEach(v => v.destroy());

@@ -24,13 +24,10 @@ export function createPlayerEntity(
         transformWidth = 16;
         transformHeight = 16;
     } else {
-        const color = 0x222222;
-        gameObject = scene.add.rectangle(
-            x, y,
-            visual.width,
-            visual.height,
-            color,
-        );
+        const sprite = scene.add.sprite(x, y, 'humanSpritesheet', 13);
+        gameObject = sprite;
+        transformWidth = 48;
+        transformHeight = 48;
     }
 
     gameObject.setDepth(10);
@@ -48,8 +45,8 @@ export function createPlayerEntity(
         );
     } else {
         body.setOffset(
-            (visual.width - config.width) / 2,
-            (visual.height - config.height),
+            (transformWidth - config.width) / 2,
+            11, // Align body bottom with sprite feet (maxY = 42)
         );
     }
 

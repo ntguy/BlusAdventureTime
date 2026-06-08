@@ -14,9 +14,9 @@ export class SpikesSystem {
             const transform = spikeEnt.getComponent<TransformComponent>('Transform')!;
             const spikeBox = {
                 x: transform.x - transform.width / 2,
-                y: transform.y - transform.height / 2,
+                y: transform.y + 9 - 10, // Starts 10px above the bottom of the 18px tile (y + 9 is bottom)
                 w: transform.width,
-                h: transform.height
+                h: 10 // Height reduced from 18 to 10
             };
 
             for (const playerEnt of players) {

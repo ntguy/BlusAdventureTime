@@ -137,20 +137,8 @@ export class TriggerSystem {
                 const color = trigger.glowColor;
                 // Draw a soft glow beneath the button/lever
                 // Center glow - bottom strip
-                g.fillStyle(color, 0.5);
-                g.fillRect(transform.x - 9, transform.y + 9 - 2, 18, 3);
-
-                // Wider, dimmer glow below
-                g.fillStyle(color, 0.2);
-                g.fillRect(transform.x - 11, transform.y + 9 + 1, 22, 3);
-
-                // Cast onto left neighbor
-                g.fillStyle(color, 0.15);
-                g.fillRect(transform.x - 9 - 18, transform.y + 9 - 1, 18, 2);
-
-                // Cast onto right neighbor
-                g.fillStyle(color, 0.15);
-                g.fillRect(transform.x + 9, transform.y + 9 - 1, 18, 2);
+                g.fillStyle(color, 0.85);
+                g.fillRect(transform.x - 9, transform.y + 9 - 4, 18, 5);
             }
 
             // Propagate if state changed
@@ -216,6 +204,7 @@ export class TriggerSystem {
         const render = entity.getComponent<RenderComponent>('Render')!;
         const physics = entity.getComponent<PhysicsBodyComponent>('PhysicsBody');
         const sprite = render?.gameObject as Phaser.GameObjects.Sprite;
+        const transform = entity.getComponent<TransformComponent>('Transform')!;
 
         if (target.targetType === 'gate') {
             if (physics && physics.body) {
@@ -225,6 +214,23 @@ export class TriggerSystem {
                 sprite.setVisible(!isActive); // make gate invisible when open
                 if (sprite.scene) {
                     sprite.scene.sound.play('sfx_door_open', { volume: 0.3 } as any);
+                }
+
+                // Render/Toggle glow if color is set
+                if (target.glowColor !== undefined) {
+                    if (!target.glowGraphics) {
+                        target.glowGraphics = sprite.scene.add.graphics();
+                        target.glowGraphics.setDepth(3); // below players and gates
+                        const uiCamera = sprite.scene.cameras.getCamera('uiCamera') || (sprite.scene as any).uiCamera;
+                        if (uiCamera) uiCamera.ignore(target.glowGraphics);
+
+                        // Draw center bottom strip glow
+                        const g = target.glowGraphics;
+                        g.clear();
+                        g.fillStyle(target.glowColor, 0.85);
+                        g.fillRect(transform.x - 9, transform.y + 9 - 4, 18, 5);
+                    }
+                    target.glowGraphics.setVisible(!isActive);
                 }
             }
         }

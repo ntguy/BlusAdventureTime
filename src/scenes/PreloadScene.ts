@@ -58,6 +58,12 @@ export class PreloadScene extends Phaser.Scene {
             frameHeight: 16
         });
 
+        // Load Human spritesheet (48x48 frames)
+        this.load.spritesheet('humanSpritesheet', 'assets/sprites/HumanSpritesheet.png', {
+            frameWidth: 48,
+            frameHeight: 48
+        });
+
         // ── Audio ──
         // Load the single placeholder SFX for all sound effects
         const placeholderAudio = 'assets/audio/sfx/collect1.mp3';
@@ -105,6 +111,14 @@ export class PreloadScene extends Phaser.Scene {
             key: 'blu_sit',
             frames: this.anims.generateFrameNumbers('bluSpritesheet', { start: 12, end: 13 }),
             frameRate: 4,
+            repeat: -1
+        });
+
+        // Create human walking animation (row 2, images 1, 2, 3 -> frames 12, 13, 14)
+        this.anims.create({
+            key: 'human_walk',
+            frames: this.anims.generateFrameNumbers('humanSpritesheet', { start: 12, end: 14 }),
+            frameRate: 8,
             repeat: -1
         });
 

@@ -13,14 +13,14 @@ export const MAX_LEVEL_HEIGHT = 60;  // tiles
 export const PHYSICS = {
     gravity: 800,       // Arcade gravity (px/s^2)
     human: {
-        width: 14,          // hitbox width
+        width: 10,          // hitbox width
         height: 32,         // hitbox height
         moveSpeed: 105,     // horizontal speed (px/s)
         jumpVelocity: -260, // upward jump velocity (px/s, negative is up)
         drag: 800,          // deceleration drag
     },
     dog: {
-        width: 14,
+        width: 12,
         height: 12,
         moveSpeed: 115,     // dog is slightly faster
         jumpVelocity: -310, // dog jumps higher

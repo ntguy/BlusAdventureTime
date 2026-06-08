@@ -16,6 +16,7 @@ import { CheckpointSystem } from '../ecs/systems/CheckpointSystem';
 import { CatSystem } from '../ecs/systems/CatSystem';
 import { SignSystem } from '../ecs/systems/SignSystem';
 import { SpikesSystem } from '../ecs/systems/SpikesSystem';
+import { FlyingSystem } from '../ecs/systems/FlyingSystem';
 import { KeySystem } from '../ecs/systems/KeySystem';
 import { MovingPlatformSystem } from '../ecs/systems/MovingPlatformSystem';
 
@@ -37,6 +38,7 @@ export class GameScene extends Phaser.Scene {
     private catSystem!: CatSystem;
     private signSystem!: SignSystem;
     private spikesSystem!: SpikesSystem;
+    private flyingSystem!: FlyingSystem;
     private keySystem!: KeySystem;
     private movingPlatformSystem!: MovingPlatformSystem;
 
@@ -91,6 +93,7 @@ export class GameScene extends Phaser.Scene {
         this.catSystem = new CatSystem();
         this.signSystem = new SignSystem();
         this.spikesSystem = new SpikesSystem(this.movementSystem);
+        this.flyingSystem = new FlyingSystem(this.movementSystem);
         this.keySystem = new KeySystem();
         this.movingPlatformSystem = new MovingPlatformSystem();
 
@@ -127,6 +130,7 @@ export class GameScene extends Phaser.Scene {
         this.catSystem.update(this.entityManager, delta, this.inputManager);
         this.signSystem.update(this.entityManager, delta);
         this.spikesSystem.update(this.entityManager, delta);
+        this.flyingSystem.update(this.entityManager, delta);
         this.movingPlatformSystem.update(this.entityManager, delta);
         this.physicsSystem.update(this.entityManager, delta);
         this.renderSystem.update(this.entityManager, delta);

@@ -43,15 +43,19 @@ export class MovementSystem {
 
                 for (const ladder of ladders) {
                     const transform = ladder.getComponent<TransformComponent>('Transform')!;
+                    const ladderLeft = transform.x - transform.width / 2;
+                    const ladderRight = transform.x + transform.width / 2;
+                    const ladderTop = transform.y - transform.height / 2;
+                    const ladderBottom = transform.y + transform.height / 2;
+
                     if (
-                        playerBox.x < transform.x + transform.width &&
-                        playerBox.x + playerBox.w > transform.x &&
-                        playerBox.y < transform.y + transform.height &&
-                        playerBox.y + playerBox.h > transform.y
+                        playerBox.x < ladderRight &&
+                        playerBox.x + playerBox.w > ladderLeft &&
+                        playerBox.y < ladderBottom &&
+                        playerBox.y + playerBox.h > ladderTop
                     ) {
                         overlapsLadder = true;
                         // Track the topmost edge of all overlapping ladder tiles
-                        const ladderTop = transform.y - transform.height / 2;
                         if (ladderTop < currentLadderTopY) currentLadderTopY = ladderTop;
                     }
                 }
@@ -88,12 +92,12 @@ export class MovementSystem {
 
                 // Vertical climbing controls with top-clamp
                 if (inputManager.isDown(pi, Action.MOVE_UP)) {
-                    if (body.y <= currentLadderTopY) {
-                        // Reached the top of the ladder — exit climbing, snap to top
+                    // Allow climbing until the player is halfway above the final ladder piece
+                    // Midpoint of topmost ladder tile is currentLadderTopY + 9, so body.y clamp is currentLadderTopY - 16
+                    const clampY = currentLadderTopY - 16;
+                    if (body.y <= clampY) {
                         body.setVelocityY(0);
-                        player.isClimbing = false;
-                        body.allowGravity = true;
-                        body.y = currentLadderTopY;
+                        body.y = clampY;
                     } else {
                         body.setVelocityY(-config.moveSpeed * 0.7);
                     }
@@ -260,6 +264,58 @@ export class MovementSystem {
                             sprite.play('blu_sit', true);
                         }
                     }
+                }
+            }
+
+            if (player.playerType === 'human') {
+                const render = entity.getComponent<RenderComponent>('Render')!;
+                const sprite = render.gameObject as Phaser.GameObjects.Sprite;
+                const speedX = Math.abs(body.velocity.x);
+
+                // Track time spent in air
+                if (player.isClimbing || body.blocked.down) {
+                    player.airTime = 0;
+                } else {
+                    player.airTime = (player.airTime || 0) + delta;
+                }
+
+                if (player.isClimbing) {
+                    sprite.anims.stop();
+                    sprite.setFrame(46);
+
+                    // Alternate flipX while actively climbing up or down
+                    if (Math.abs(body.velocity.y) > 0.1) {
+                        const alt = Math.floor(sprite.scene.time.now / 300) % 2 === 0;
+                        sprite.setFlipX(alt);
+                    } else {
+                        sprite.setFlipX(false);
+                    }
+                } else if (!body.blocked.down) {
+                    // Airborne (jump / fall)
+                    sprite.anims.stop();
+                    if ((player.airTime || 0) >= 125) {
+                        sprite.setFrame(19); // Row 2, image 8
+                    } else {
+                        sprite.setFrame(18); // Row 2, image 7
+                    }
+
+                    if (body.velocity.x > 0.1) {
+                        sprite.setFlipX(false);
+                    } else if (body.velocity.x < -0.1) {
+                        sprite.setFlipX(true);
+                    }
+                } else if (speedX > 0.1) {
+                    // Walk animation
+                    sprite.play('human_walk', true);
+                    if (body.velocity.x > 0.1) {
+                        sprite.setFlipX(false);
+                    } else if (body.velocity.x < -0.1) {
+                        sprite.setFlipX(true);
+                    }
+                } else {
+                    // Standing idle (Row 2, image 2)
+                    sprite.anims.stop();
+                    sprite.setFrame(13);
                 }
             }
         }

@@ -16,6 +16,7 @@ import {
     LauncherComponent,
     CatComponent,
     SignComponent,
+    FlyingComponent,
     SpikesComponent,
     KeyComponent,
     MovingPlatformComponent
@@ -372,6 +373,52 @@ export class LevelLoader {
                     text
                 } as SignComponent);
 
+            } else if (entData.type === 'flying') {
+                const props = entData.properties || {};
+                const endX = props.endX !== undefined ? Number(props.endX) : entData.x;
+                const endY = props.endY !== undefined ? Number(props.endY) : entData.y;
+                const velocity = props.velocity !== undefined ? Number(props.velocity) : 60;
+                const startFrame = props.startFrame !== undefined ? Number(props.startFrame) : 120;
+
+                const visual = getVisual(startFrame);
+                const sprite = scene.physics.add.sprite(entX, entY, visual.texture, visual.frame);
+                sprite.setDepth(8);
+
+                const body = sprite.body as Phaser.Physics.Arcade.Body;
+                body.setAllowGravity(false);
+                body.setSize(14, 14);
+
+                // Add collision with terrain
+                scene.physics.add.collider(sprite, terrainLayer);
+
+                const entity = entityManager.createEntity();
+                entity.addComponent({ type: 'Transform', x: sprite.x, y: sprite.y, width: 18, height: 18 } as TransformComponent);
+                entity.addComponent({
+                    type: 'Render',
+                    gameObject: sprite,
+                    depth: 8,
+                    idleFrame: visual.frame,
+                    activeFrame: visual.activeFrame
+                } as RenderComponent);
+                entity.addComponent({
+                    type: 'PhysicsBody',
+                    body,
+                    isGrounded: false
+                } as PhysicsBodyComponent);
+                entity.addComponent({
+                    type: 'Flying',
+                    startX: entX,
+                    startY: entY,
+                    endX: endX * TILE_SIZE + TILE_SIZE / 2,
+                    endY: endY * TILE_SIZE + TILE_SIZE / 2,
+                    velocity,
+                    direction: 1,
+                    startFrame,
+                    animTimer: 0,
+                    animFrame: 0,
+                    collisionCooldown: 0
+                } as FlyingComponent);
+
             } else if (entData.type === 'spikes') {
                 const visual = getVisual(68);
                 const sprite = scene.add.sprite(entX, entY, visual.texture, visual.frame);
@@ -426,10 +473,10 @@ export class LevelLoader {
                 const props = entData.properties || {};
                 const channel = String(props.channel || '1');
                 const listenChannel = props.listenChannel ? String(props.listenChannel) : undefined;
-                const triggerType = (props.triggerType as 'interact' | 'pressure') || 'pressure';
-                const visualType = (props.visualType as 'button' | 'lever') || 'button';
+                const triggerType = 'pressure';
+                const visualType = 'button';
 
-                // Look up glowColor: check if channel has a glow color in our pre-scanned map, or use entity property
+                // Look up glowColor
                 let glowColor: number | undefined;
                 if (props.glowColor !== undefined) {
                     const colorStr = String(props.glowColor);
@@ -438,9 +485,46 @@ export class LevelLoader {
                     glowColor = channelGlowColors.get(channel);
                 }
 
-                const defaultFrame = visualType === 'lever' ? 64 : 148;
-                const defaultActiveFrame = visualType === 'lever' ? 66 : 149;
-                const visual = getVisual(defaultFrame, defaultActiveFrame);
+                const visual = getVisual(148, 149);
+                const sprite = scene.add.sprite(entX, entY, visual.texture, visual.frame);
+                sprite.setDepth(5);
+
+                const entity = entityManager.createEntity();
+                entity.addComponent({ type: 'Transform', x: sprite.x, y: sprite.y, width: 18, height: 18 } as TransformComponent);
+                entity.addComponent({
+                    type: 'Render',
+                    gameObject: sprite,
+                    depth: 5,
+                    idleFrame: visual.frame,
+                    activeFrame: visual.activeFrame
+                } as RenderComponent);
+                entity.addComponent({
+                    type: 'Trigger',
+                    channel,
+                    listenChannel,
+                    triggerType,
+                    isActive: false,
+                    visualType,
+                    glowColor
+                } as TriggerComponent);
+
+            } else if (entData.type === 'lever') {
+                const props = entData.properties || {};
+                const channel = String(props.channel || '1');
+                const listenChannel = props.listenChannel ? String(props.listenChannel) : undefined;
+                const triggerType = 'interact';
+                const visualType = 'lever';
+
+                // Look up glowColor
+                let glowColor: number | undefined;
+                if (props.glowColor !== undefined) {
+                    const colorStr = String(props.glowColor);
+                    glowColor = parseInt(colorStr.replace('0x', ''), 16) || undefined;
+                } else {
+                    glowColor = channelGlowColors.get(channel);
+                }
+
+                const visual = getVisual(64, 66);
                 const sprite = scene.add.sprite(entX, entY, visual.texture, visual.frame);
                 sprite.setDepth(5);
 
@@ -466,8 +550,18 @@ export class LevelLoader {
             } else if (entData.type === 'gate') {
                 const props = entData.properties || {};
                 const listenChannel = String(props.listenChannel || '1');
+                const tileGid = props.tileGid !== undefined ? Number(props.tileGid) : 150;
 
-                const visual = getVisual(150);
+                // Look up glowColor: check if channel has a glow color in our pre-scanned map, or use entity property
+                let glowColor: number | undefined;
+                if (props.glowColor !== undefined && String(props.glowColor).trim() !== '') {
+                    const colorStr = String(props.glowColor);
+                    glowColor = parseInt(colorStr.replace('0x', ''), 16) || undefined;
+                } else if (channelGlowColors.has(listenChannel)) {
+                    glowColor = channelGlowColors.get(listenChannel);
+                }
+
+                const visual = getVisual(tileGid);
                 const sprite = scene.physics.add.sprite(entX, entY, visual.texture, visual.frame);
                 sprite.setDepth(6);
                 gatesGroup.add(sprite);
@@ -490,7 +584,8 @@ export class LevelLoader {
                     type: 'Triggerable',
                     listenChannel,
                     state: false,
-                    targetType: 'gate'
+                    targetType: 'gate',
+                    glowColor
                 } as TriggerableComponent);
             } else if (entData.type === 'launcher') {
                 const visual = getVisual(107, 108);
@@ -579,8 +674,13 @@ export class LevelLoader {
                     if (otherEnt.type === 'button') {
                         const oProps = otherEnt.properties || {};
                         if (String(oProps.channel || '1') === channel) {
-                            const vType = oProps.visualType || 'button';
-                            triggerMode = vType === 'lever' ? 'lever' : 'button';
+                            triggerMode = 'button';
+                            break;
+                        }
+                    } else if (otherEnt.type === 'lever') {
+                        const oProps = otherEnt.properties || {};
+                        if (String(oProps.channel || '1') === channel) {
+                            triggerMode = 'lever';
                             break;
                         }
                     }

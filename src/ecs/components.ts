@@ -34,6 +34,7 @@ export interface PlayerComponent extends Component {
     isBarking?: boolean;
     isDying?: boolean;
     dyingTimer?: number;
+    airTime?: number;
 }
 
 export interface TriggerComponent extends Component {
@@ -52,6 +53,8 @@ export interface TriggerableComponent extends Component {
     listenChannel: string;
     state: boolean;
     targetType: 'gate' | 'platform';
+    glowColor?: number;
+    glowGraphics?: Phaser.GameObjects.Graphics;
 }
 
 // Future components to be used in Milestone 3
@@ -113,6 +116,20 @@ export interface SignComponent extends Component {
     textObject?: Phaser.GameObjects.Text;
 }
 
+export interface FlyingComponent extends Component {
+    type: 'Flying';
+    startX: number;
+    startY: number;
+    endX: number;
+    endY: number;
+    velocity: number;
+    direction: 1 | -1;
+    startFrame: number;
+    animTimer: number;
+    animFrame: number;
+    collisionCooldown: number;
+}
+
 export interface SpikesComponent extends Component {
     type: 'Spikes';
 }
@@ -120,7 +137,8 @@ export interface SpikesComponent extends Component {
 export interface KeyComponent extends Component {
     type: 'Key';
     isPickedUp: boolean;
-    mouthSprite?: Phaser.GameObjects.Sprite; // quarter-size key overlay on dog mouth
+    carrier?: 'dog' | 'human' | null;
+    mouthSprite?: Phaser.GameObjects.Sprite; // quarter-size key overlay on dog/human mouth/hand
 }
 
 export interface MovingPlatformComponent extends Component {

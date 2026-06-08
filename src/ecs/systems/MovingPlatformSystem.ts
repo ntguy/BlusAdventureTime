@@ -180,24 +180,10 @@ export class MovingPlatformSystem {
             const sprite = plat.tileSprites[i];
             const cx = sprite.x;
             const cy = sprite.y;
-            const halfW = TILE_SIZE / 2;
-            const halfH = TILE_SIZE / 2;
 
             // Center glow — bottom strip
-            g.fillStyle(color, 0.5);
-            g.fillRect(cx - halfW, cy + halfH - 2, TILE_SIZE, 3);
-
-            // Wider, dimmer glow below
-            g.fillStyle(color, 0.2);
-            g.fillRect(cx - halfW - 2, cy + halfH + 1, TILE_SIZE + 4, 3);
-
-            // Cast onto left neighbor
-            g.fillStyle(color, 0.15);
-            g.fillRect(cx - halfW - TILE_SIZE, cy + halfH - 1, TILE_SIZE, 2);
-
-            // Cast onto right neighbor
-            g.fillStyle(color, 0.15);
-            g.fillRect(cx + halfW, cy + halfH - 1, TILE_SIZE, 2);
+            g.fillStyle(color, 0.85);
+            g.fillRect(cx - 9, cy + 9 - 4, 18, 5);
         }
     }
 }
