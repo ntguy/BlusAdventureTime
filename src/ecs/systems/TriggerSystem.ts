@@ -126,7 +126,7 @@ export class TriggerSystem {
             if (trigger.glowColor !== undefined) {
                 if (!trigger.glowGraphics) {
                     trigger.glowGraphics = sprite.scene.add.graphics();
-                    trigger.glowGraphics.setDepth(3); // below players and triggers
+                    trigger.glowGraphics.setDepth(6); // above triggers (depth 5)
                     const uiCamera = sprite.scene.cameras.getCamera('uiCamera') || (sprite.scene as any).uiCamera;
                     if (uiCamera) uiCamera.ignore(trigger.glowGraphics);
                 }
@@ -145,6 +145,16 @@ export class TriggerSystem {
             if (trigger.isActive !== prevActive) {
                 this.emitChannel(entityManager, trigger.channel, trigger.isActive);
             }
+        }
+
+        // Update overlays for gates and moving platforms
+        const triggerables = entityManager.query('Triggerable');
+        for (const ent of triggerables) {
+            this.updateOverlay(ent, entityManager);
+        }
+        const platforms = entityManager.query('MovingPlatform');
+        for (const ent of platforms) {
+            this.updateOverlay(ent, entityManager);
         }
     }
 
@@ -180,11 +190,17 @@ export class TriggerSystem {
         for (const ent of triggerables) {
             const target = ent.getComponent<TriggerableComponent>('Triggerable')!;
             if (target.listenChannel === channel) {
-                const prev = target.state;
-                target.state = isActive;
+                let targetActive = isActive;
+                if (target.requireAll) {
+                    const channelTriggers = triggers.filter(trEnt => trEnt.getComponent<TriggerComponent>('Trigger')!.channel === channel);
+                    targetActive = channelTriggers.length > 0 && channelTriggers.every(trEnt => trEnt.getComponent<TriggerComponent>('Trigger')!.isActive);
+                }
 
-                if (prev !== isActive) {
-                    this.applyTriggerState(ent, isActive);
+                const prev = target.state;
+                target.state = targetActive;
+
+                if (prev !== targetActive) {
+                    this.applyTriggerState(ent, targetActive);
                 }
             }
         }
@@ -194,7 +210,12 @@ export class TriggerSystem {
         for (const ent of platforms) {
             const plat = ent.getComponent<MovingPlatformComponent>('MovingPlatform')!;
             if (plat.channel === channel) {
-                plat.channelState = isActive;
+                let targetActive = isActive;
+                if (plat.requireAll) {
+                    const channelTriggers = triggers.filter(trEnt => trEnt.getComponent<TriggerComponent>('Trigger')!.channel === channel);
+                    targetActive = channelTriggers.length > 0 && channelTriggers.every(trEnt => trEnt.getComponent<TriggerComponent>('Trigger')!.isActive);
+                }
+                plat.channelState = targetActive;
             }
         }
     }
@@ -220,7 +241,7 @@ export class TriggerSystem {
                 if (target.glowColor !== undefined) {
                     if (!target.glowGraphics) {
                         target.glowGraphics = sprite.scene.add.graphics();
-                        target.glowGraphics.setDepth(3); // below players and gates
+                        target.glowGraphics.setDepth(9); // above gates (depth 8)
                         const uiCamera = sprite.scene.cameras.getCamera('uiCamera') || (sprite.scene as any).uiCamera;
                         if (uiCamera) uiCamera.ignore(target.glowGraphics);
 
@@ -246,16 +267,102 @@ export class TriggerSystem {
         const triggerables = entityManager.query('Triggerable');
         for (const ent of triggerables) {
             const target = ent.getComponent<TriggerableComponent>('Triggerable')!;
-            const isActive = this.channelStates.get(target.listenChannel) || false;
+            let isActive = this.channelStates.get(target.listenChannel) || false;
+            if (target.requireAll) {
+                const channelTriggers = triggers.filter(trEnt => trEnt.getComponent<TriggerComponent>('Trigger')!.channel === target.listenChannel);
+                isActive = channelTriggers.length > 0 && channelTriggers.every(trEnt => trEnt.getComponent<TriggerComponent>('Trigger')!.isActive);
+            }
             target.state = isActive;
             this.applyTriggerState(ent, isActive);
+            this.updateOverlay(ent, entityManager);
         }
 
         // Sync moving platforms
         const platforms = entityManager.query('MovingPlatform');
         for (const ent of platforms) {
             const plat = ent.getComponent<MovingPlatformComponent>('MovingPlatform')!;
-            plat.channelState = this.channelStates.get(plat.channel) || false;
+            let isActive = this.channelStates.get(plat.channel) || false;
+            if (plat.requireAll) {
+                const channelTriggers = triggers.filter(trEnt => trEnt.getComponent<TriggerComponent>('Trigger')!.channel === plat.channel);
+                isActive = channelTriggers.length > 0 && channelTriggers.every(trEnt => trEnt.getComponent<TriggerComponent>('Trigger')!.isActive);
+            }
+            plat.channelState = isActive;
+            this.updateOverlay(ent, entityManager);
+        }
+    }
+
+    private updateOverlay(entity: Entity, entityManager: EntityManager): void {
+        const triggerable = entity.getComponent<TriggerableComponent>('Triggerable');
+        const movingPlatform = entity.getComponent<MovingPlatformComponent>('MovingPlatform');
+
+        const requireAll = triggerable?.requireAll || movingPlatform?.requireAll;
+        const channel = triggerable?.listenChannel || movingPlatform?.channel;
+
+        if (!requireAll || !channel) {
+            // Clean up overlay sprite if they were disabled
+            const overlaySprite = triggerable?.overlaySprite || movingPlatform?.overlaySprite;
+            if (overlaySprite) {
+                overlaySprite.destroy();
+                if (triggerable) triggerable.overlaySprite = undefined;
+                if (movingPlatform) movingPlatform.overlaySprite = undefined;
+            }
+            return;
+        }
+
+        // Find all triggers for this channel
+        const triggers = entityManager.query('Trigger');
+        const channelTriggers = triggers.filter(trEnt => trEnt.getComponent<TriggerComponent>('Trigger')!.channel === channel);
+        const total = channelTriggers.length;
+        const active = channelTriggers.filter(trEnt => trEnt.getComponent<TriggerComponent>('Trigger')!.isActive).length;
+        const remaining = Math.max(0, total - active);
+
+        // Get position to draw the overlay sprite
+        let x = 0;
+        let y = 0;
+        let scene: Phaser.Scene | undefined;
+
+        if (triggerable && triggerable.targetType === 'gate') {
+            const render = entity.getComponent<RenderComponent>('Render')!;
+            const sprite = render?.gameObject as Phaser.GameObjects.Sprite;
+            if (sprite) {
+                x = sprite.x;
+                y = sprite.y;
+                scene = sprite.scene;
+            }
+        } else if (movingPlatform) {
+            if (movingPlatform.tileSprites && movingPlatform.tileSprites.length > 0) {
+                const sprite = movingPlatform.tileSprites[0];
+                x = sprite.x;
+                y = sprite.y;
+                scene = sprite.scene;
+            }
+        }
+
+        if (!scene) return;
+
+        let overlaySprite = triggerable ? triggerable.overlaySprite : movingPlatform?.overlaySprite;
+
+        if (remaining > 0) {
+            const frameIndex = 160 + Math.min(9, remaining);
+            if (!overlaySprite) {
+                overlaySprite = scene.add.sprite(x, y, 'tilemap_packed', frameIndex);
+                overlaySprite.setDepth(11); // above players (depth 10)
+                if (triggerable) {
+                    triggerable.overlaySprite = overlaySprite;
+                } else if (movingPlatform) {
+                    movingPlatform.overlaySprite = overlaySprite;
+                }
+                const uiCamera = scene.cameras.getCamera('uiCamera') || (scene as any).uiCamera;
+                if (uiCamera) uiCamera.ignore(overlaySprite);
+            } else {
+                overlaySprite.setFrame(frameIndex);
+                overlaySprite.setPosition(x, y);
+                overlaySprite.setVisible(true);
+            }
+        } else {
+            if (overlaySprite) {
+                overlaySprite.setVisible(false);
+            }
         }
     }
 }

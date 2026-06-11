@@ -269,8 +269,8 @@ export class EditorScene extends Phaser.Scene {
         this.bgLayer = this.map.createBlankLayer('background', [tileset, bgTileset], 0, 0)!;
         this.terrainLayer = this.map.createBlankLayer('terrain', tileset, 0, 0)!;
 
-        this.bgLayer.setDepth(1);
-        this.terrainLayer.setDepth(2);
+        this.bgLayer.setDepth(2);
+        this.terrainLayer.setDepth(1);
 
         this.workspaceGroup.add(this.bgLayer);
         this.workspaceGroup.add(this.terrainLayer);
@@ -370,8 +370,8 @@ export class EditorScene extends Phaser.Scene {
         // Draw movement path arrow for moving platforms and flying entities
         if (ent.type === 'movingPlatform' || ent.type === 'flying') {
             const props = ent.properties || {};
-            const endTileX = props.endX !== undefined ? Number(props.endX) : ent.x;
-            const endTileY = props.endY !== undefined ? Number(props.endY) : ent.y;
+            const endTileX = ent.x + Number(props.endX || 0);
+            const endTileY = ent.y + Number(props.endY || 0);
             if (endTileX !== ent.x || endTileY !== ent.y) {
                 const startPx = { x: ent.x * 18 + 9, y: ent.y * 18 + 9 };
                 const endPx = { x: endTileX * 18 + 9, y: endTileY * 18 + 9 };
@@ -594,11 +594,6 @@ export class EditorScene extends Phaser.Scene {
 
                 sprite.on('pointerdown', () => {
                     this.selectedTileIndex = tile.gid;
-                    // Auto switch tool based on background vs terrain GID
-                    const correctTool = tile.gid >= 180 ? 'bg' : 'terrain';
-                    if (this.activeTool !== correctTool) {
-                        this.setTool(correctTool);
-                    }
                     this.updateSelectionHighlights();
                 });
 
@@ -785,9 +780,17 @@ export class EditorScene extends Phaser.Scene {
         });
     }
 
+    private isModifierHeld(pointer: Phaser.Input.Pointer): boolean {
+        if (pointer.event) {
+            return !!(pointer.event.shiftKey || pointer.event.metaKey || pointer.event.ctrlKey);
+        }
+        return false;
+    }
+
     private setupPointerInput(): void {
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-            if (pointer.leftButtonDown()) {
+            const isMod = this.isModifierHeld(pointer);
+            if (pointer.leftButtonDown() || (isMod && pointer.rightButtonDown())) {
                 if (this.activeTool === 'move') {
                     this.startDragging(pointer);
                 } else {
@@ -797,11 +800,16 @@ export class EditorScene extends Phaser.Scene {
         });
 
         this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-            if (pointer.leftButtonDown()) {
-                if (this.activeTool === 'move') {
-                    this.updateDragging(pointer);
-                } else {
-                    this.paintGridAt(pointer);
+            if (this.isDragging && this.activeTool === 'move') {
+                this.updateDragging(pointer);
+            } else {
+                const isMod = this.isModifierHeld(pointer);
+                if (pointer.leftButtonDown() || (isMod && pointer.rightButtonDown())) {
+                    if (this.activeTool === 'move') {
+                        this.updateDragging(pointer);
+                    } else {
+                        this.paintGridAt(pointer);
+                    }
                 }
             }
         });
@@ -1238,10 +1246,12 @@ export class EditorScene extends Phaser.Scene {
             this.editPropsButton.setVisible(true);
         } else if (ent.type === 'flying') {
             const startFrame = props.startFrame !== undefined ? props.startFrame : 120;
-            const endX = props.endX !== undefined ? props.endX : ent.x;
-            const endY = props.endY !== undefined ? props.endY : ent.y;
+            const endX = props.endX !== undefined ? Number(props.endX) : 0;
+            const endY = props.endY !== undefined ? Number(props.endY) : 0;
             const vel = props.velocity || 60;
-            this.selectedEntityText.setText(`Selected: ${name}\nFrame: ${startFrame}\nEnd: ${endX},${endY}\nVel: ${vel}`);
+            const endXDisp = (endX >= 0 ? '+' : '') + endX;
+            const endYDisp = (endY >= 0 ? '+' : '') + endY;
+            this.selectedEntityText.setText(`Selected: ${name}\nFrame: ${startFrame}\nEndOffset: ${endXDisp},${endYDisp}\nVel: ${vel}`);
             this.selectedEntityText.setColor('#a233ff');
             this.editPropsButton.setVisible(true);
         } else if (ent.type === 'gate') {
@@ -1258,11 +1268,14 @@ export class EditorScene extends Phaser.Scene {
             this.editPropsButton.setVisible(true);
         } else if (ent.type === 'movingPlatform') {
             const ch = props.channel || '1';
-            const endX = props.endX !== undefined ? props.endX : ent.x;
-            const endY = props.endY !== undefined ? props.endY : ent.y;
+            const endX = props.endX !== undefined ? Number(props.endX) : 0;
+            const endY = props.endY !== undefined ? Number(props.endY) : 0;
             const vel = props.velocity || 60;
             const glow = props.glowColor || '0x44aaff';
-            this.selectedEntityText.setText(`Selected: ${name}\nCh: ${ch} | End: ${endX},${endY}\nVel: ${vel} | Glow: ${glow}`);
+            const carry = props.carryEntities !== 'false';
+            const endXDisp = (endX >= 0 ? '+' : '') + endX;
+            const endYDisp = (endY >= 0 ? '+' : '') + endY;
+            this.selectedEntityText.setText(`Selected: ${name}\nCh: ${ch} | Offset: ${endXDisp},${endYDisp}\nVel: ${vel} | Glow: ${glow}\nCarry: ${carry}`);
             this.selectedEntityText.setColor('#44aaff');
             this.editPropsButton.setVisible(true);
         } else {
@@ -1323,17 +1336,20 @@ export class EditorScene extends Phaser.Scene {
             } else if (ent.type === 'flying') {
                 const startFrame = prompt("Enter Start Frame Index (for 3-frame anim):", String(props.startFrame !== undefined ? props.startFrame : 120));
                 if (startFrame === null) return;
-                const endX = prompt("Enter End Tile X:", String(props.endX !== undefined ? props.endX : ent.x));
+                const endX = prompt("Enter Relative End Tile X Offset:", String(props.endX !== undefined ? props.endX : "0"));
                 if (endX === null) return;
-                const endY = prompt("Enter End Tile Y:", String(props.endY !== undefined ? props.endY : ent.y));
+                const endY = prompt("Enter Relative End Tile Y Offset:", String(props.endY !== undefined ? props.endY : "0"));
                 if (endY === null) return;
                 const velocity = prompt("Enter Velocity (px/s):", String(props.velocity || 60));
                 if (velocity === null) return;
 
+                const parsedEndX = parseInt(endX.trim());
+                const parsedEndY = parseInt(endY.trim());
+
                 ent.properties = {
                     startFrame: parseInt(startFrame.trim()) || 120,
-                    endX: parseInt(endX.trim()) || ent.x,
-                    endY: parseInt(endY.trim()) || ent.y,
+                    endX: isNaN(parsedEndX) ? 0 : parsedEndX,
+                    endY: isNaN(parsedEndY) ? 0 : parsedEndY,
                     velocity: parseInt(velocity.trim()) || 60
                 };
 
@@ -1369,29 +1385,48 @@ export class EditorScene extends Phaser.Scene {
                 this.updateSelectedEntityUI();
                 this.createWorkspaceTilemap();
             } else if (ent.type === 'movingPlatform') {
-                const endX = prompt("Enter End Tile X:", String(props.endX !== undefined ? props.endX : ent.x));
+                const endX = prompt("Enter Relative End Tile X Offset:", String(props.endX !== undefined ? props.endX : "0"));
                 if (endX === null) return;
-                const endY = prompt("Enter End Tile Y:", String(props.endY !== undefined ? props.endY : ent.y));
+                const endY = prompt("Enter Relative End Tile Y Offset:", String(props.endY !== undefined ? props.endY : "0"));
                 if (endY === null) return;
                 const velocity = prompt("Enter Velocity (px/s):", String(props.velocity || 60));
                 if (velocity === null) return;
                 const channel = prompt("Enter Channel:", String(props.channel || "1"));
                 if (channel === null) return;
-                const tileGid = prompt("Enter Tile GID (visual tile index):", String(props.tileGid !== undefined ? props.tileGid : 0));
+                const tileGid = prompt("Enter Tile GID (visual tile index):", String(props.tileGid !== undefined ? props.tileGid : 9));
                 if (tileGid === null) return;
                 const extraTiles = prompt("Enter Extra Tile Offsets (e.g. '1,0 2,0' for 3-wide, or leave empty):", String(props.extraTiles || ""));
                 if (extraTiles === null) return;
+                const carryEntities = prompt("Carry Entities on Top automatically? (true/false):", String(props.carryEntities !== undefined ? props.carryEntities : "true"));
+                if (carryEntities === null) return;
                 const glowColor = prompt("Enter Glow Color (hex, e.g. 0x44aaff):", String(props.glowColor || "0x44aaff"));
                 if (glowColor === null) return;
 
+                const parsedEndX = parseInt(endX.trim());
+                const parsedEndY = parseInt(endY.trim());
+                const parsedTileGid = parseInt(tileGid.trim());
+
                 ent.properties = {
-                    endX: parseInt(endX.trim()) || ent.x,
-                    endY: parseInt(endY.trim()) || ent.y,
+                    endX: isNaN(parsedEndX) ? 0 : parsedEndX,
+                    endY: isNaN(parsedEndY) ? 0 : parsedEndY,
                     velocity: parseInt(velocity.trim()) || 60,
                     channel: channel.trim() || "1",
-                    tileGid: parseInt(tileGid.trim()) || 0,
+                    tileGid: isNaN(parsedTileGid) ? 9 : parsedTileGid,
                     extraTiles: extraTiles.trim() || undefined,
+                    carryEntities: carryEntities.trim() || "true",
                     glowColor: glowColor.trim() || "0x44aaff"
+                };
+
+                this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                this.updateSelectedEntityUI();
+                this.createWorkspaceTilemap();
+            } else if (ent.type === 'cat') {
+                const facing = prompt("Enter Initial Facing Direction (left/right):", String(props.facing || "right"));
+                if (facing === null) return;
+
+                const facingVal = facing.trim().toLowerCase();
+                ent.properties = {
+                    facing: facingVal === 'left' ? 'left' : 'right'
                 };
 
                 this.sound.play('sfx_checkpoint', { volume: 0.3 });
@@ -1433,14 +1468,16 @@ export class EditorScene extends Phaser.Scene {
             } else if (ent.type === 'flying') {
                 this.showPropertyForm("Flying Entity Properties", [
                     { key: 'startFrame', label: 'Start Frame Index (3-frame anim)', type: 'text', value: String(props.startFrame !== undefined ? props.startFrame : "120") },
-                    { key: 'endX', label: 'End Tile X', type: 'text', value: String(props.endX !== undefined ? props.endX : ent.x) },
-                    { key: 'endY', label: 'End Tile Y', type: 'text', value: String(props.endY !== undefined ? props.endY : ent.y) },
+                    { key: 'endX', label: 'Relative End Tile X Offset', type: 'text', value: String(props.endX !== undefined ? props.endX : "0") },
+                    { key: 'endY', label: 'Relative End Tile Y Offset', type: 'text', value: String(props.endY !== undefined ? props.endY : "0") },
                     { key: 'velocity', label: 'Velocity (px/s)', type: 'text', value: String(props.velocity || "60") }
                 ], (values) => {
+                    const parsedEndX = parseInt(values.endX.trim());
+                    const parsedEndY = parseInt(values.endY.trim());
                     ent.properties = {
                         startFrame: parseInt(values.startFrame.trim()) || 120,
-                        endX: parseInt(values.endX.trim()) || ent.x,
-                        endY: parseInt(values.endY.trim()) || ent.y,
+                        endX: isNaN(parsedEndX) ? 0 : parsedEndX,
+                        endY: isNaN(parsedEndY) ? 0 : parsedEndY,
                         velocity: parseInt(values.velocity.trim()) || 60
                     };
                     this.sound.play('sfx_checkpoint', { volume: 0.3 });
@@ -1451,12 +1488,14 @@ export class EditorScene extends Phaser.Scene {
                 this.showPropertyForm("Gate Properties", [
                     { key: 'listenChannel', label: 'Listen Channel', type: 'text', value: String(props.listenChannel || "1") },
                     { key: 'tileGid', label: 'Tile GID (visual frame index)', type: 'text', value: String(props.tileGid !== undefined ? props.tileGid : "150") },
-                    { key: 'glowColor', label: 'Glow Color (hex, e.g. 0xff5500, or leave empty)', type: 'text', value: String(props.glowColor || "") }
+                    { key: 'glowColor', label: 'Glow Color (hex, e.g. 0xff5500, or leave empty)', type: 'text', value: String(props.glowColor || "") },
+                    { key: 'requireAll', label: 'Require All Triggers Active (true/false)', type: 'text', value: String(props.requireAll !== undefined ? props.requireAll : "false") }
                 ], (values) => {
                     ent.properties = {
                         listenChannel: values.listenChannel.trim() || "1",
                         tileGid: parseInt(values.tileGid.trim()) || 150,
-                        glowColor: values.glowColor.trim() ? values.glowColor.trim() : undefined
+                        glowColor: values.glowColor.trim() ? values.glowColor.trim() : undefined,
+                        requireAll: values.requireAll.trim().toLowerCase() === 'true'
                     };
                     this.sound.play('sfx_checkpoint', { volume: 0.3 });
                     this.updateSelectedEntityUI();
@@ -1475,22 +1514,42 @@ export class EditorScene extends Phaser.Scene {
                 });
             } else if (ent.type === 'movingPlatform') {
                 this.showPropertyForm("Moving Platform Properties", [
-                    { key: 'endX', label: 'End Tile X', type: 'text', value: String(props.endX !== undefined ? props.endX : ent.x) },
-                    { key: 'endY', label: 'End Tile Y', type: 'text', value: String(props.endY !== undefined ? props.endY : ent.y) },
+                    { key: 'endX', label: 'Relative End Tile X Offset', type: 'text', value: String(props.endX !== undefined ? props.endX : "0") },
+                    { key: 'endY', label: 'Relative End Tile Y Offset', type: 'text', value: String(props.endY !== undefined ? props.endY : "0") },
                     { key: 'velocity', label: 'Velocity (px/s)', type: 'text', value: String(props.velocity || "60") },
                     { key: 'channel', label: 'Trigger Channel', type: 'text', value: String(props.channel || "1") },
-                    { key: 'tileGid', label: 'Tile GID (visual frame index)', type: 'text', value: String(props.tileGid !== undefined ? props.tileGid : "0") },
+                    { key: 'tileGid', label: 'Tile GID (visual frame index)', type: 'text', value: String(props.tileGid !== undefined ? props.tileGid : "9") },
                     { key: 'extraTiles', label: 'Extra Offsets (e.g. 1,0 2,0)', type: 'text', value: String(props.extraTiles || "") },
-                    { key: 'glowColor', label: 'Glow Color (hex, e.g. 0x44aaff)', type: 'text', value: String(props.glowColor || "0x44aaff") }
+                    { key: 'carryEntities', label: 'Carry Entities on Top (true/false)', type: 'text', value: String(props.carryEntities !== undefined ? props.carryEntities : "true") },
+                    { key: 'glowColor', label: 'Glow Color (hex, e.g. 0x44aaff)', type: 'text', value: String(props.glowColor || "0x44aaff") },
+                    { key: 'requireAll', label: 'Require All Triggers Active (true/false)', type: 'text', value: String(props.requireAll !== undefined ? props.requireAll : "false") }
                 ], (values) => {
+                    const parsedEndX = parseInt(values.endX.trim());
+                    const parsedEndY = parseInt(values.endY.trim());
+                    const parsedTileGid = parseInt(values.tileGid.trim());
+
                     ent.properties = {
-                        endX: parseInt(values.endX.trim()) || ent.x,
-                        endY: parseInt(values.endY.trim()) || ent.y,
+                        endX: isNaN(parsedEndX) ? 0 : parsedEndX,
+                        endY: isNaN(parsedEndY) ? 0 : parsedEndY,
                         velocity: parseInt(values.velocity.trim()) || 60,
                         channel: values.channel.trim() || "1",
-                        tileGid: parseInt(values.tileGid.trim()) || 0,
+                        tileGid: isNaN(parsedTileGid) ? 9 : parsedTileGid,
                         extraTiles: values.extraTiles.trim() || undefined,
-                        glowColor: values.glowColor.trim() || "0x44aaff"
+                        carryEntities: values.carryEntities.trim() || "true",
+                        glowColor: values.glowColor.trim() || "0x44aaff",
+                        requireAll: values.requireAll.trim().toLowerCase() === 'true'
+                    };
+                    this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                    this.updateSelectedEntityUI();
+                    this.createWorkspaceTilemap();
+                });
+            } else if (ent.type === 'cat') {
+                this.showPropertyForm("Cat Properties", [
+                    { key: 'facing', label: 'Initial Facing Direction (left/right)', type: 'text', value: String(props.facing || "right") }
+                ], (values) => {
+                    const facingVal = values.facing.trim().toLowerCase();
+                    ent.properties = {
+                        facing: facingVal === 'left' ? 'left' : 'right'
                     };
                     this.sound.play('sfx_checkpoint', { volume: 0.3 });
                     this.updateSelectedEntityUI();
@@ -1928,7 +1987,7 @@ export class EditorScene extends Phaser.Scene {
         const h = this.levelData.meta.height;
         if (tileX < 0 || tileX >= w || tileY < 0 || tileY >= h) return;
 
-        const isShiftHeld = pointer.event.shiftKey;
+        const isShiftHeld = pointer.event ? !!(pointer.event.shiftKey || pointer.event.metaKey || pointer.event.ctrlKey) : false;
 
         // If Shift is held: toggle selection of the clicked tile/entity
         if (isShiftHeld) {
@@ -2029,6 +2088,8 @@ export class EditorScene extends Phaser.Scene {
             if (entity) {
                 this.dragEntity = entity;
                 this.isDragging = true;
+                // Remove the dragged entity from the entities list during drag
+                this.levelData.entities = this.levelData.entities.filter(e => e !== entity);
 
                 const labels: Record<string, string> = {
                     humanSpawn: 'H', dogSpawn: 'D', exitDoor: 'DR', crate: 'CR', key: 'KY',
@@ -2211,6 +2272,7 @@ export class EditorScene extends Phaser.Scene {
                     this.removeEntityAt(tileX, tileY);
                     this.dragEntity.x = tileX;
                     this.dragEntity.y = tileY;
+                    this.levelData.entities.push(this.dragEntity);
                     dropped = true;
                     this.selectedEntity = this.dragEntity;
                 } else if (this.dragTileLayer === 'terrain') {
@@ -2224,6 +2286,9 @@ export class EditorScene extends Phaser.Scene {
 
             if (!dropped) {
                 if (this.dragEntity) {
+                    this.dragEntity.x = this.dragStartX;
+                    this.dragEntity.y = this.dragStartY;
+                    this.levelData.entities.push(this.dragEntity);
                     const key = `${this.dragStartX},${this.dragStartY}`;
                     const originalVisual = this.entityVisuals.get(key);
                     if (originalVisual) {

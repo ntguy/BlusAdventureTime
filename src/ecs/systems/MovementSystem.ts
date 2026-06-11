@@ -182,7 +182,7 @@ export class MovementSystem {
                         const targetObj = { r: 2, alpha: 1 };
                         scene.tweens.add({
                             targets: targetObj,
-                            r: 36,
+                            r: 32,
                             alpha: 0,
                             duration: 200,
                             onUpdate: () => {

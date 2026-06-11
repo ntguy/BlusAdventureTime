@@ -73,8 +73,8 @@ async function run() {
                 x: 5,
                 y: 12,
                 properties: {
-                    endX: 18,
-                    endY: 12,
+                    endX: 13,
+                    endY: 0,
                     velocity: 60,
                     channel: '1',
                     tileGid: 26,
@@ -140,7 +140,7 @@ async function run() {
         // 2. Step on the button (player is at x=2, button is at x=3)
         console.log('Moving player onto button (press Right)...');
         await page.keyboard.down('KeyD');
-        await new Promise(resolve => setTimeout(resolve, 350));
+        await new Promise(resolve => setTimeout(resolve, 180));
         await page.keyboard.up('KeyD');
 
         // Wait a little bit for the platform to start traveling
@@ -169,7 +169,7 @@ async function run() {
         // 3. Step off the button (press Left to x=2)
         console.log('Stepping off the button (press Left)...');
         await page.keyboard.down('KeyA');
-        await new Promise(resolve => setTimeout(resolve, 450));
+        await new Promise(resolve => setTimeout(resolve, 300));
         await page.keyboard.up('KeyA');
 
         // Wait to verify it has stopped/frozen
@@ -198,7 +198,7 @@ async function run() {
         // 4. Step back on the button to check it resumes
         console.log('Stepping back on the button (press Right)...');
         await page.keyboard.down('KeyD');
-        await new Promise(resolve => setTimeout(resolve, 400));
+        await new Promise(resolve => setTimeout(resolve, 200));
         await page.keyboard.up('KeyD');
 
         // Wait to let it travel more

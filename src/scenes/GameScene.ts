@@ -90,7 +90,7 @@ export class GameScene extends Phaser.Scene {
         this.triggerSystem = new TriggerSystem();
         this.launcherSystem = new LauncherSystem();
         this.checkpointSystem = new CheckpointSystem();
-        this.catSystem = new CatSystem();
+        this.catSystem = new CatSystem(this.movementSystem);
         this.signSystem = new SignSystem();
         this.spikesSystem = new SpikesSystem(this.movementSystem);
         this.flyingSystem = new FlyingSystem(this.movementSystem);

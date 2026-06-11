@@ -431,6 +431,81 @@ async function run() {
         }
         console.log('✔ Verified button is NOT activated by a crate.');
 
+        // Test Case 5: Human touching cat causes death
+        console.log('Test Case 5: Human touching cat causes death...');
+        console.log('Exiting playtest from Case 4...');
+        await page.keyboard.press('Escape');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        await page.evaluate(() => {
+            const es = window.__PHASER_GAME__.scene.getScene('EditorScene');
+            es.levelData.entities = [
+                { type: 'humanSpawn', x: 2, y: 12 },
+                { type: 'dogSpawn', x: 20, y: 12 },
+                { type: 'cat', x: 11, y: 12 }
+            ];
+            es.createWorkspaceTilemap();
+            es.entityVisuals.clear();
+            es.levelData.entities.forEach(ent => es.drawEntityVisual(ent));
+        });
+        console.log('✔ Placed cat in editor for Case 5');
+
+        console.log('Entering Playtest mode...');
+        await page.keyboard.press('KeyP');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        await page.evaluate(() => {
+            const gameScene = window.__PHASER_GAME__.scene.getScene('GameScene');
+            const humanEnt = gameScene.entityManager.query('Player', 'PhysicsBody').find(ent => ent.getComponent('Player').playerType === 'human');
+            const humanBody = humanEnt.getComponent('PhysicsBody').body;
+            const catEnt = gameScene.entityManager.query('Cat')[0];
+            if (!catEnt) {
+                console.error('Cat entity not found!');
+                return;
+            }
+            const catBody = catEnt.getComponent('PhysicsBody').body;
+
+            // Reset human and cat to clear test coordinates
+            humanBody.reset(54, 190);
+            catBody.reset(90, 190);
+            console.log('RESET: humanBody.x/y:', humanBody.x, humanBody.y, 'catBody.x/y:', catBody.x, catBody.y);
+        });
+        await new Promise(resolve => setTimeout(resolve, 500)); // Wait for them to settle on the ground
+
+        // Log positions after settling
+        await page.evaluate(() => {
+            const gameScene = window.__PHASER_GAME__.scene.getScene('GameScene');
+            const humanBody = gameScene.entityManager.query('Player', 'PhysicsBody').find(ent => ent.getComponent('Player').playerType === 'human').getComponent('PhysicsBody').body;
+            const catBody = gameScene.entityManager.query('Cat')[0].getComponent('PhysicsBody').body;
+            console.log('SETTLED: humanBody.x/y:', humanBody.x, humanBody.y, 'catBody.x/y:', catBody.x, catBody.y);
+        });
+
+        // Move human right towards the cat
+        console.log('Walking human to the right...');
+        await page.keyboard.down('KeyD');
+        
+        let died = false;
+        for (let i = 0; i < 20; i++) { // check every 50ms for 1000ms
+            await new Promise(resolve => setTimeout(resolve, 50));
+            const isDying = await page.evaluate(() => {
+                const gameScene = window.__PHASER_GAME__.scene.getScene('GameScene');
+                const humanEnt = gameScene.entityManager.query('Player', 'PhysicsBody').find(ent => ent.getComponent('Player').playerType === 'human');
+                return humanEnt.getComponent('Player').isDying || false;
+            });
+            if (isDying) {
+                died = true;
+                break;
+            }
+        }
+        await page.keyboard.up('KeyD');
+        await new Promise(resolve => setTimeout(resolve, 200)); // wait for settling
+
+        if (!died) {
+            console.error('FAILURE: Human did not die after touching the cat.');
+            process.exit(1);
+        }
+        console.log('✔ Verified human touches cat causes death successfully.');
+
         console.log('SUCCESS: All Cat and Button entity integration tests passed completely!');
         await browser.close();
         process.exit(0);

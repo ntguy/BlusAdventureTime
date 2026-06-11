@@ -1,6 +1,7 @@
 import { EntityManager } from '../Entity';
 import { CatComponent, PhysicsBodyComponent, TransformComponent, PlayerComponent } from '../components';
 import { InputManager, Action } from '../../input/InputManager';
+import { MovementSystem } from './MovementSystem';
 import Phaser from 'phaser';
 
 function normalizeAngle(angle: number): number {
@@ -10,12 +11,56 @@ function normalizeAngle(angle: number): number {
 }
 
 export class CatSystem {
+    constructor(private movementSystem: MovementSystem) {}
+
     update(entityManager: EntityManager, delta: number, inputManager: InputManager): void {
         const cats = entityManager.query('Transform', 'Cat', 'PhysicsBody');
         const dogEntity = entityManager.query('Player', 'PhysicsBody').find(ent => {
             const player = ent.getComponent<PlayerComponent>('Player')!;
             return player.playerType === 'dog';
         });
+
+        // Check if human touches any cat (and dies)
+        const humanEntity = entityManager.query('Player', 'PhysicsBody').find(ent => {
+            const player = ent.getComponent<PlayerComponent>('Player')!;
+            return player.playerType === 'human';
+        });
+        if (humanEntity) {
+            const player = humanEntity.getComponent<PlayerComponent>('Player')!;
+            if (!player.isDying) {
+                const humanBody = humanEntity.getComponent<PhysicsBodyComponent>('PhysicsBody')!.body;
+                const humanBox = {
+                    x: humanBody.x,
+                    y: humanBody.y,
+                    w: humanBody.width,
+                    h: humanBody.height
+                };
+
+                for (const catEnt of cats) {
+                    const catBody = catEnt.getComponent<PhysicsBodyComponent>('PhysicsBody')!.body;
+                    const catCenterX = catBody.x + catBody.width / 2;
+                    const catCenterY = catBody.y + catBody.height / 2;
+
+                    // 18px wide/high contact box
+                    const catContactBox = {
+                        x: catCenterX - 9,
+                        y: catCenterY - 9,
+                        w: 18,
+                        h: 18
+                    };
+
+                    if (
+                        humanBox.x < catContactBox.x + catContactBox.w &&
+                        humanBox.x + humanBox.w > catContactBox.x &&
+                        humanBox.y < catContactBox.y + catContactBox.h &&
+                        humanBox.y + humanBox.h > catContactBox.y
+                    ) {
+                        this.movementSystem.triggerDeath(humanEntity, player, humanBody);
+                        break;
+                    }
+                }
+            }
+        }
 
         // 1. Check if the dog barked on this frame
         if (dogEntity) {
@@ -42,8 +87,8 @@ export class CatSystem {
                     const dy = catCenterY - dogCenterY;
                     const distance = Math.sqrt(dx * dx + dy * dy);
 
-                    // Check if within bark range (54 pixels, increased by 50% from 36)
-                    if (distance <= 54) {
+                    // Check if within bark range (50 pixels, reduced by 4px from 54)
+                    if (distance <= 50) {
                         const angleToCat = Math.atan2(dy, dx);
                         const angleDiff = Math.abs(normalizeAngle(angleToCat - dogFacingAngle));
 
@@ -104,10 +149,19 @@ export class CatSystem {
         for (const catEnt of cats) {
             const cat = catEnt.getComponent<CatComponent>('Cat')!;
             const catBody = catEnt.getComponent<PhysicsBodyComponent>('PhysicsBody')!.body;
+            const sprite = catBody.gameObject as Phaser.GameObjects.Sprite;
 
             if (cat.state === 'startled') {
                 catBody.setVelocityX(0);
                 cat.startleTimer -= delta;
+
+                if (sprite) {
+                    if (sprite.anims.currentAnim?.key !== 'cat_idle') {
+                        sprite.play('cat_idle');
+                    }
+                    sprite.setFlipX(cat.direction === -1);
+                    catBody.setOffset(8, 5);
+                }
 
                 if (cat.exclamation) {
                     // Make the exclamation point follow the cat's head
@@ -137,6 +191,14 @@ export class CatSystem {
             } else if (cat.state === 'running') {
                 catBody.setVelocityX(cat.direction * cat.runSpeed);
 
+                if (sprite) {
+                    if (sprite.anims.currentAnim?.key !== 'cat_run') {
+                        sprite.play('cat_run');
+                    }
+                    sprite.setFlipX(cat.direction === -1);
+                    catBody.setOffset(8, 5);
+                }
+
                 const distanceTraveled = Math.abs(catBody.x - cat.startX);
 
                 // Stop if we hit target distance (5 spaces = 90px)
@@ -153,6 +215,19 @@ export class CatSystem {
             } else {
                 // Sleep: stationary
                 catBody.setVelocityX(0);
+
+                if (sprite) {
+                    if (sprite.anims.currentAnim?.key !== 'cat_idle') {
+                        sprite.play('cat_idle');
+                    }
+                    if (cat.direction !== 0) {
+                        sprite.setFlipX(cat.direction === -1);
+                    } else {
+                        sprite.setFlipX(cat.initialFacing === 'left');
+                    }
+                    catBody.setOffset(8, 5);
+                }
+
                 if (cat.exclamation) {
                     cat.exclamation.destroy();
                     cat.exclamation = undefined;

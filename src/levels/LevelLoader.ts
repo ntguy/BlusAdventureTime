@@ -96,8 +96,8 @@ export class LevelLoader {
         this.fillLayer(terrainLayer, levelData.layers.terrain, levelData.meta.width);
         this.fillLayer(fgLayer, levelData.layers.foreground, levelData.meta.width);
 
-        bgLayer.setDepth(1);
-        terrainLayer.setDepth(2);
+        bgLayer.setDepth(2);
+        terrainLayer.setDepth(1);
         fgLayer.setDepth(20);
 
         // Enable Arcade physics collision on terrain layer tiles
@@ -318,12 +318,17 @@ export class LevelLoader {
                 } as CheckpointComponent);
 
             } else if (entData.type === 'cat') {
-                const visual = getVisual(135);
-                const sprite = scene.physics.add.sprite(entX, entY, visual.texture, visual.frame);
+                const props = entData.properties || {};
+                const initialFacing = props.facing === 'left' ? 'left' : 'right';
+
+                const sprite = scene.physics.add.sprite(entX, entY, 'catIdle', 0);
                 sprite.setDepth(8);
+                sprite.play('cat_idle');
+                sprite.setFlipX(initialFacing === 'left');
 
                 const body = sprite.body as Phaser.Physics.Arcade.Body;
-                body.setSize(18, 18);
+                body.setSize(16, 18);
+                body.setOffset(8, 5);
 
                 // Add collision bounds for cat
                 scene.physics.add.collider(sprite, terrainLayer);
@@ -336,9 +341,7 @@ export class LevelLoader {
                 entity.addComponent({
                     type: 'Render',
                     gameObject: sprite,
-                    depth: 8,
-                    idleFrame: visual.frame,
-                    activeFrame: visual.activeFrame
+                    depth: 8
                 } as RenderComponent);
                 entity.addComponent({ type: 'PhysicsBody', body, isGrounded: false } as PhysicsBodyComponent);
                 entity.addComponent({
@@ -348,7 +351,8 @@ export class LevelLoader {
                     direction: 0,
                     runSpeed: 90,
                     targetDistance: 90,
-                    startleTimer: 0
+                    startleTimer: 0,
+                    initialFacing: initialFacing
                 } as CatComponent);
 
             } else if (entData.type === 'sign') {
@@ -375,8 +379,8 @@ export class LevelLoader {
 
             } else if (entData.type === 'flying') {
                 const props = entData.properties || {};
-                const endX = props.endX !== undefined ? Number(props.endX) : entData.x;
-                const endY = props.endY !== undefined ? Number(props.endY) : entData.y;
+                const endX = entData.x + Number(props.endX || 0);
+                const endY = entData.y + Number(props.endY || 0);
                 const velocity = props.velocity !== undefined ? Number(props.velocity) : 60;
                 const startFrame = props.startFrame !== undefined ? Number(props.startFrame) : 120;
 
@@ -585,7 +589,8 @@ export class LevelLoader {
                     listenChannel,
                     state: false,
                     targetType: 'gate',
-                    glowColor
+                    glowColor,
+                    requireAll: props.requireAll === true || props.requireAll === 'true'
                 } as TriggerableComponent);
             } else if (entData.type === 'launcher') {
                 const visual = getVisual(107, 108);
@@ -615,11 +620,11 @@ export class LevelLoader {
                 } as LauncherComponent);
             } else if (entData.type === 'movingPlatform') {
                 const props = entData.properties || {};
-                const endX = props.endX !== undefined ? Number(props.endX) : entData.x;
-                const endY = props.endY !== undefined ? Number(props.endY) : entData.y;
+                const endX = entData.x + Number(props.endX || 0);
+                const endY = entData.y + Number(props.endY || 0);
                 const velocity = props.velocity !== undefined ? Number(props.velocity) : 60;
                 const channel = String(props.channel || '1');
-                const tileGid = props.tileGid !== undefined ? Number(props.tileGid) : 0;
+                const tileGid = props.tileGid !== undefined ? Number(props.tileGid) : 9;
                 const extraTilesStr = props.extraTiles !== undefined ? String(props.extraTiles) : '';
 
                 // Look up glow color from props or pre-scanned map
@@ -647,7 +652,7 @@ export class LevelLoader {
                 }
 
                 // Determine visual frame and texture
-                const visual = getVisual(tileGid || 26);
+                const visual = getVisual(tileGid);
 
                 const tileSprites: Phaser.GameObjects.Sprite[] = [];
                 const tileBodies: Phaser.Physics.Arcade.Body[] = [];
@@ -712,7 +717,8 @@ export class LevelLoader {
                     tileOffsets,
                     glowColor,
                     prevX: entX,
-                    prevY: entY
+                    prevY: entY,
+                    requireAll: props.requireAll === true || props.requireAll === 'true'
                 } as MovingPlatformComponent);
             }
         }
@@ -777,6 +783,102 @@ export class LevelLoader {
         scene.physics.add.collider(p1Render.gameObject, movingPlatformsGroup);
         scene.physics.add.collider(p2Render.gameObject, movingPlatformsGroup);
         scene.physics.add.collider(cratesGroup, movingPlatformsGroup);
+
+        // Link carried entities to moving platforms (extraEntities property or auto-link)
+        const platforms = entityManager.query('MovingPlatform');
+        const allEntitiesWithTransform = entityManager.query('Transform');
+        
+        for (const entData of levelData.entities) {
+            if (entData.type === 'movingPlatform') {
+                const props = entData.properties || {};
+                const carryEntities = props.carryEntities !== 'false';
+                const extraEntitiesStr = props.extraEntities !== undefined ? String(props.extraEntities) : '';
+                
+                const platX = entData.x * TILE_SIZE + TILE_SIZE / 2;
+                const platY = entData.y * TILE_SIZE + TILE_SIZE / 2;
+                
+                const platEntity = platforms.find(p => {
+                    const tc = p.getComponent<TransformComponent>('Transform');
+                    return tc && Math.abs(tc.x - platX) < 1 && Math.abs(tc.y - platY) < 1;
+                });
+                
+                if (platEntity) {
+                    const mpComp = platEntity.getComponent<MovingPlatformComponent>('MovingPlatform');
+                    if (mpComp) {
+                        mpComp.carriedEntities = [];
+                        
+                        // 1. Manually specified extra entities via extraEntities string
+                        if (extraEntitiesStr.trim()) {
+                            const pairs = extraEntitiesStr.trim().split(/\s+/);
+                            for (const pair of pairs) {
+                                const [dxStr, dyStr] = pair.split(',');
+                                if (dxStr !== undefined && dyStr !== undefined) {
+                                    const dx = parseInt(dxStr) || 0;
+                                    const dy = parseInt(dyStr) || 0;
+                                    
+                                    const targetGridX = entData.x + dx;
+                                    const targetGridY = entData.y + dy;
+                                    
+                                    const targetWorldX = targetGridX * TILE_SIZE + TILE_SIZE / 2;
+                                    const targetWorldY = targetGridY * TILE_SIZE + TILE_SIZE / 2;
+                                    
+                                    const carried = allEntitiesWithTransform.find(e => {
+                                        if (e === platEntity) return false;
+                                        const tc = e.getComponent<TransformComponent>('Transform');
+                                        return tc && Math.abs(tc.x - targetWorldX) < 1 && Math.abs(tc.y - targetWorldY) < 1;
+                                    });
+                                    
+                                    if (carried) {
+                                        mpComp.carriedEntities.push(carried);
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // 2. Auto-link static entities on top of platform tiles if carryEntities is enabled
+                        if (carryEntities) {
+                            const platformTiles = new Set<string>();
+                            platformTiles.add(`${entData.x},${entData.y}`);
+                            const extraTilesStr = props.extraTiles !== undefined ? String(props.extraTiles) : '';
+                            if (extraTilesStr.trim()) {
+                                const pairs = extraTilesStr.trim().split(/\s+/);
+                                for (const pair of pairs) {
+                                    const [dxStr, dyStr] = pair.split(',');
+                                    if (dxStr !== undefined && dyStr !== undefined) {
+                                        const dx = parseInt(dxStr) || 0;
+                                        const dy = parseInt(dyStr) || 0;
+                                        platformTiles.add(`${entData.x + dx},${entData.y + dy}`);
+                                    }
+                                }
+                            }
+                            
+                            // Auto-link static entities whose grid coordinates are directly on top (y - 1) of any platform tile
+                            for (const otherEnt of levelData.entities) {
+                                if (otherEnt === entData) continue;
+                                
+                                const staticTypes = ['button', 'lever', 'launcher', 'sign', 'spikes', 'exitDoor', 'checkpoint'];
+                                if (staticTypes.includes(otherEnt.type)) {
+                                    const expectedTileBelow = `${otherEnt.x},${otherEnt.y + 1}`;
+                                    if (platformTiles.has(expectedTileBelow)) {
+                                        const targetWorldX = otherEnt.x * TILE_SIZE + TILE_SIZE / 2;
+                                        const targetWorldY = otherEnt.y * TILE_SIZE + TILE_SIZE / 2;
+                                        
+                                        const carried = allEntitiesWithTransform.find(e => {
+                                            const tc = e.getComponent<TransformComponent>('Transform');
+                                            return tc && Math.abs(tc.x - targetWorldX) < 1 && Math.abs(tc.y - targetWorldY) < 1;
+                                        });
+                                        
+                                        if (carried && !mpComp.carriedEntities.includes(carried)) {
+                                            mpComp.carriedEntities.push(carried);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         return {
             levelWidthPx,

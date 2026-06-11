@@ -21,7 +21,7 @@ const RIDER_TOLERANCE = 4; // px — how close the player's feet must be to the 
 export class MovingPlatformSystem {
     update(entityManager: EntityManager, delta: number): void {
         const platforms = entityManager.query('MovingPlatform');
-        const players = entityManager.query('Player', 'PhysicsBody');
+        const physicsEntities = entityManager.query('PhysicsBody');
 
         const dtSec = delta / 1000;
 
@@ -83,18 +83,51 @@ export class MovingPlatformSystem {
                 const body = plat.tileBodies[i];
 
                 sprite.setPosition(tileX, tileY);
-                body.reset(tileX - body.width / 2, tileY - body.height / 2);
+                body.reset(tileX, tileY);
             }
 
-            // Carry riders — check each player against each tile
-            for (const playerEnt of players) {
-                const playerComp = playerEnt.getComponent<PlayerComponent>('Player')!;
-                if (playerComp.isDying) continue;
+            // Move overlay sprite if it exists
+            if (plat.overlaySprite) {
+                plat.overlaySprite.setPosition(newX, newY);
+            }
 
-                const pBody = playerEnt.getComponent<PhysicsBodyComponent>('PhysicsBody')!.body;
-                const playerBottom = pBody.y + pBody.height;
-                const playerLeft = pBody.x;
-                const playerRight = pBody.x + pBody.width;
+            // Move carried entities along with the platform
+            if (plat.carriedEntities && (frameDX !== 0 || frameDY !== 0)) {
+                for (const entity of plat.carriedEntities) {
+                    const physicsBody = entity.getComponent<any>('PhysicsBody');
+                    if (physicsBody && physicsBody.body) {
+                        // Move physics body; Phaser and PhysicsSystem will sync gameObject and transform
+                        physicsBody.body.x += frameDX;
+                        physicsBody.body.y += frameDY;
+                    } else {
+                        // Move transform for non-physics entities; RenderSystem will sync gameObject
+                        const transform = entity.getComponent<TransformComponent>('Transform');
+                        if (transform) {
+                            transform.x += frameDX;
+                            transform.y += frameDY;
+                        }
+                    }
+                }
+            }
+
+            // Carry riders (players, crates, keys, etc.) — check each physics entity against each tile
+            for (const physEnt of physicsEntities) {
+                // Ignore platforms themselves
+                if (physEnt === platEnt) continue;
+
+                // Ignore if this physics entity is already explicitly carried by this platform
+                if (plat.carriedEntities && plat.carriedEntities.includes(physEnt)) continue;
+
+                // Ignore players that are dying
+                const pComp = physEnt.getComponent<PlayerComponent>('Player');
+                if (pComp && pComp.isDying) continue;
+
+                const pBody = physEnt.getComponent<PhysicsBodyComponent>('PhysicsBody')!.body;
+                if (!pBody) continue;
+
+                const bodyBottom = pBody.y + pBody.height;
+                const bodyLeft = pBody.x;
+                const bodyRight = pBody.x + pBody.width;
 
                 let isRiding = false;
                 for (let i = 0; i < plat.tileBodies.length; i++) {
@@ -103,13 +136,11 @@ export class MovingPlatformSystem {
                     const tileLeft = tBody.x;
                     const tileRight = tBody.x + tBody.width;
 
-                    // Player is standing on this tile if:
-                    // 1. Player bottom is within RIDER_TOLERANCE of tile top
-                    // 2. Player horizontally overlaps the tile
+                    // Standing on this tile if:
                     if (
-                        Math.abs(playerBottom - tileTop) < RIDER_TOLERANCE &&
-                        playerRight > tileLeft &&
-                        playerLeft < tileRight &&
+                        Math.abs(bodyBottom - tileTop) < RIDER_TOLERANCE &&
+                        bodyRight > tileLeft &&
+                        bodyLeft < tileRight &&
                         pBody.velocity.y >= 0 // not jumping upward through
                     ) {
                         isRiding = true;
@@ -120,6 +151,13 @@ export class MovingPlatformSystem {
                 if (isRiding && (frameDX !== 0 || frameDY !== 0)) {
                     pBody.x += frameDX;
                     pBody.y += frameDY;
+
+                    // Sync the Transform component for rendering / positioning updates
+                    const transform = physEnt.getComponent<TransformComponent>('Transform');
+                    if (transform) {
+                        transform.x = pBody.x + pBody.width / 2;
+                        transform.y = pBody.y + pBody.height / 2;
+                    }
                 }
             }
 
@@ -163,7 +201,7 @@ export class MovingPlatformSystem {
             if (plat.tileSprites.length > 0) {
                 const scene = plat.tileSprites[0].scene;
                 plat.glowGraphics = scene.add.graphics();
-                plat.glowGraphics.setDepth(3); // below the platform sprites
+                plat.glowGraphics.setDepth(7); // above the platform sprites
                 // Ignore on UI camera
                 const uiCamera = scene.cameras.getCamera('uiCamera') || (scene as any).uiCamera;
                 if (uiCamera) uiCamera.ignore(plat.glowGraphics);

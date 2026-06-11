@@ -64,6 +64,18 @@ export class PreloadScene extends Phaser.Scene {
             frameHeight: 48
         });
 
+        // Load White Cat Idle spritesheet (32x32 frames, vertical)
+        this.load.spritesheet('catIdle', 'assets/sprites/WhiteCatIdle.png', {
+            frameWidth: 32,
+            frameHeight: 32
+        });
+
+        // Load White Cat Run spritesheet (32x32 frames, vertical)
+        this.load.spritesheet('catRun', 'assets/sprites/WhiteCatRun.png', {
+            frameWidth: 32,
+            frameHeight: 32
+        });
+
         // ── Audio ──
         // Load the single placeholder SFX for all sound effects
         const placeholderAudio = 'assets/audio/sfx/collect1.mp3';
@@ -119,6 +131,21 @@ export class PreloadScene extends Phaser.Scene {
             key: 'human_walk',
             frames: this.anims.generateFrameNumbers('humanSpritesheet', { start: 12, end: 14 }),
             frameRate: 8,
+            repeat: -1
+        });
+
+        // Create cat animations (6 frames each from vertical sheets)
+        this.anims.create({
+            key: 'cat_idle',
+            frames: this.anims.generateFrameNumbers('catIdle', { start: 0, end: 5 }),
+            frameRate: 5,
+            repeat: -1
+        });
+
+        this.anims.create({
+            key: 'cat_run',
+            frames: this.anims.generateFrameNumbers('catRun', { start: 0, end: 5 }),
+            frameRate: 10,
             repeat: -1
         });
 

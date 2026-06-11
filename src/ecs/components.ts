@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { Component } from './Entity';
+import { Component, Entity } from './Entity';
 
 export interface TransformComponent extends Component {
     type: 'Transform';
@@ -55,6 +55,8 @@ export interface TriggerableComponent extends Component {
     targetType: 'gate' | 'platform';
     glowColor?: number;
     glowGraphics?: Phaser.GameObjects.Graphics;
+    requireAll?: boolean;
+    overlaySprite?: Phaser.GameObjects.Sprite;
 }
 
 // Future components to be used in Milestone 3
@@ -108,6 +110,7 @@ export interface CatComponent extends Component {
     targetDistance: number;
     startleTimer: number;
     exclamation?: any;
+    initialFacing?: 'left' | 'right';
 }
 
 export interface SignComponent extends Component {
@@ -161,4 +164,7 @@ export interface MovingPlatformComponent extends Component {
     prevX: number;              // previous frame world X (for rider delta calc)
     prevY: number;              // previous frame world Y
     movingDirection?: 1 | -1;   // tracks travel direction when button is held
+    carriedEntities?: Entity[];  // entities attached to and moving with this platform
+    requireAll?: boolean;
+    overlaySprite?: Phaser.GameObjects.Sprite;
 }
