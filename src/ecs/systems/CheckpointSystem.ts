@@ -77,28 +77,50 @@ export class CheckpointSystem {
                     playerBox.y < checkpointBox.y + checkpointBox.h &&
                     playerBox.y + playerBox.h > checkpointBox.y
                 ) {
-                    if (player.playerType === 'human') {
-                        if (!checkpoint.humanActive) {
+                    if (checkpoint.isHD) {
+                        if (!checkpoint.humanActive || !checkpoint.dogActive) {
                             checkpoint.humanActive = true;
+                            checkpoint.dogActive = true;
                             stateChanged = true;
-                            player.spawnX = transform.x;
-                            player.spawnY = transform.y - 4; // Spawn slightly above checkpoint surface
+
+                            // Update spawn coordinates for both players
+                            for (const pEnt of players) {
+                                const pComp = pEnt.getComponent<PlayerComponent>('Player')!;
+                                pComp.spawnX = transform.x;
+                                pComp.spawnY = transform.y - 4;
+                            }
+
                             this.deactivateOtherCheckpoints(entityManager, checkpointEnt.id, 'human');
-                            
+                            this.deactivateOtherCheckpoints(entityManager, checkpointEnt.id, 'dog');
+
                             if (sprite && sprite.scene) {
                                 sprite.scene.sound.play('sfx_checkpoint', { volume: 0.4 });
                             }
                         }
-                    } else if (player.playerType === 'dog') {
-                        if (!checkpoint.dogActive) {
-                            checkpoint.dogActive = true;
-                            stateChanged = true;
-                            player.spawnX = transform.x;
-                            player.spawnY = transform.y - 4; // Spawn slightly above checkpoint surface
-                            this.deactivateOtherCheckpoints(entityManager, checkpointEnt.id, 'dog');
-                            
-                            if (sprite && sprite.scene) {
-                                sprite.scene.sound.play('sfx_checkpoint', { volume: 0.4 });
+                    } else {
+                        if (player.playerType === 'human') {
+                            if (!checkpoint.humanActive) {
+                                checkpoint.humanActive = true;
+                                stateChanged = true;
+                                player.spawnX = transform.x;
+                                player.spawnY = transform.y - 4; // Spawn slightly above checkpoint surface
+                                this.deactivateOtherCheckpoints(entityManager, checkpointEnt.id, 'human');
+                                
+                                if (sprite && sprite.scene) {
+                                    sprite.scene.sound.play('sfx_checkpoint', { volume: 0.4 });
+                                }
+                            }
+                        } else if (player.playerType === 'dog') {
+                            if (!checkpoint.dogActive) {
+                                checkpoint.dogActive = true;
+                                stateChanged = true;
+                                player.spawnX = transform.x;
+                                player.spawnY = transform.y - 4; // Spawn slightly above checkpoint surface
+                                this.deactivateOtherCheckpoints(entityManager, checkpointEnt.id, 'dog');
+                                
+                                if (sprite && sprite.scene) {
+                                    sprite.scene.sound.play('sfx_checkpoint', { volume: 0.4 });
+                                }
                             }
                         }
                     }

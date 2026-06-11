@@ -6,6 +6,15 @@ export class BootScene extends Phaser.Scene {
     }
 
     create(): void {
-        this.scene.start('PreloadScene');
+        if (document.fonts) {
+            document.fonts.ready.then(() => {
+                this.scene.start('PreloadScene');
+            }).catch(() => {
+                // Fallback in case of error
+                this.scene.start('PreloadScene');
+            });
+        } else {
+            this.scene.start('PreloadScene');
+        }
     }
 }

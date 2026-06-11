@@ -115,7 +115,7 @@ export class MovementSystem {
                 }
 
                 // Exit climbing at the bottom of the ladder
-                if (body.blocked.down && inputManager.isDown(pi, Action.MOVE_DOWN)) {
+                if (physics.isGrounded && inputManager.isDown(pi, Action.MOVE_DOWN)) {
                     player.isClimbing = false;
                     body.allowGravity = true;
                 }
@@ -132,7 +132,7 @@ export class MovementSystem {
                 }
 
                 // Standard jump controls
-                if (inputManager.isJustDown(pi, Action.JUMP) && body.blocked.down) {
+                if (inputManager.isJustDown(pi, Action.JUMP) && physics.isGrounded) {
                     body.setVelocityY(config.jumpVelocity);
                 }
 
@@ -224,7 +224,7 @@ export class MovementSystem {
                 // If currently barking, wait for animation to complete or motion to interrupt
                 const speedX = Math.abs(body.velocity.x);
                 if (player.isBarking) {
-                    if (speedX > 0.1 || !body.blocked.down) {
+                    if (speedX > 0.1 || !physics.isGrounded) {
                         player.isBarking = false;
                     } else if (sprite.anims.currentAnim?.key === 'blu_bark' && sprite.anims.isPlaying) {
                         player.idleTime = 0;
@@ -234,7 +234,7 @@ export class MovementSystem {
                 }
 
                 if (!player.isBarking) {
-                    if (speedX > 0.1 && body.blocked.down) {
+                    if (speedX > 0.1 && physics.isGrounded) {
                         player.idleTime = 0;
                         sprite.play('blu_walk', true);
                         if (body.velocity.x > 0.1) {
@@ -245,7 +245,7 @@ export class MovementSystem {
                     } else if (player.isClimbing) {
                         player.idleTime = 0;
                         sprite.play('blu_idle', true);
-                    } else if (!body.blocked.down) {
+                    } else if (!physics.isGrounded) {
                         player.idleTime = 0;
                         sprite.play('blu_sit', true);
 
@@ -273,7 +273,7 @@ export class MovementSystem {
                 const speedX = Math.abs(body.velocity.x);
 
                 // Track time spent in air
-                if (player.isClimbing || body.blocked.down) {
+                if (player.isClimbing || physics.isGrounded) {
                     player.airTime = 0;
                 } else {
                     player.airTime = (player.airTime || 0) + delta;
@@ -290,7 +290,7 @@ export class MovementSystem {
                     } else {
                         sprite.setFlipX(false);
                     }
-                } else if (!body.blocked.down) {
+                } else if (!physics.isGrounded) {
                     // Airborne (jump / fall)
                     sprite.anims.stop();
                     if ((player.airTime || 0) >= 125) {

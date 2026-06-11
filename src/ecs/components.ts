@@ -13,6 +13,7 @@ export interface PhysicsBodyComponent extends Component {
     type: 'PhysicsBody';
     body: Phaser.Physics.Arcade.Body;
     isGrounded: boolean;
+    groundedTimer?: number; // buffer time in ms to handle physics jitter on dynamic entities
 }
 
 export interface RenderComponent extends Component {
@@ -87,6 +88,7 @@ export interface CheckpointComponent extends Component {
     flickerTimer: number;     // time accumulated for flicker
     showingAlt: boolean;      // currently showing alternative frame
     graphics?: Phaser.GameObjects.Graphics;
+    isHD?: boolean;           // true if this is a combined Human/Dog spawn/checkpoint
 }
 
 export interface ExitDoorComponent extends Component {

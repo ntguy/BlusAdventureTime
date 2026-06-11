@@ -258,6 +258,38 @@ export class LevelLoader {
                     showingAlt: false
                 } as CheckpointComponent);
 
+            } else if (entData.type === 'hd') {
+                humanSpawn = { x: entData.x, y: entData.y };
+                dogSpawn = { x: entData.x, y: entData.y };
+
+                const props = entData.properties || {};
+                const flickerRate = props.flickerRate !== undefined ? Number(props.flickerRate) : 500;
+                const flickerTile = props.flickerTile !== undefined ? Number(props.flickerTile) : 112;
+
+                const visual = getVisual(111);
+                const sprite = scene.add.sprite(entX, entY, visual.texture, visual.frame);
+                sprite.setDepth(5);
+
+                const entity = entityManager.createEntity();
+                entity.addComponent({ type: 'Transform', x: sprite.x, y: sprite.y, width: 18, height: 18 } as TransformComponent);
+                entity.addComponent({
+                    type: 'Render',
+                    gameObject: sprite,
+                    depth: 5,
+                    idleFrame: visual.frame,
+                    activeFrame: visual.activeFrame
+                } as RenderComponent);
+                entity.addComponent({
+                    type: 'Checkpoint',
+                    humanActive: true,
+                    dogActive: true,
+                    flickerRate,
+                    flickerTile,
+                    flickerTimer: 0,
+                    showingAlt: false,
+                    isHD: true
+                } as CheckpointComponent);
+
             } else if (entData.type === 'crate') {
                 const visual = getVisual(26);
                 const sprite = scene.physics.add.sprite(entX, entY, visual.texture, visual.frame);
@@ -265,7 +297,8 @@ export class LevelLoader {
                 cratesGroup.add(sprite);
 
                 const body = sprite.body as Phaser.Physics.Arcade.Body;
-                body.setSize(16, 16);
+                body.setSize(14, 16);
+                body.setOffset(2, 2);
                 body.setDragX(5000); // Way more friction!
 
                 const entity = entityManager.createEntity();
@@ -613,6 +646,8 @@ export class LevelLoader {
                 const body = sprite.body as Phaser.Physics.Arcade.Body;
                 body.setAllowGravity(false);
                 body.setImmovable(true);
+                body.setSize(18, 14);
+                body.setOffset(0, 4);
 
                 const entity = entityManager.createEntity();
                 entity.addComponent({ type: 'Transform', x: sprite.x, y: sprite.y, width: 18, height: 18 } as TransformComponent);
@@ -914,10 +949,10 @@ export class LevelLoader {
         if (preset === 'grassyMountain') {
             scene.cameras.main.setBackgroundColor('#c9d7e7');
             const layers = [
-                { key: 'grassyMountain_4', scrollFactorX: 0.05, scrollFactorY: 0.05 },
-                { key: 'grassyMountain_3', scrollFactorX: 0.2, scrollFactorY: 0.1 },
-                { key: 'grassyMountain_2', scrollFactorX: 0.5, scrollFactorY: 0.15 },
-                { key: 'grassyMountain_1', scrollFactorX: 0.8, scrollFactorY: 0.2 }
+                { key: 'grassyMountain_4', scrollFactorX: 0.05, scrollFactorY: 0.02 },
+                { key: 'grassyMountain_3', scrollFactorX: 0.2, scrollFactorY: 0.05 },
+                { key: 'grassyMountain_2', scrollFactorX: 0.5, scrollFactorY: 0.07 },
+                { key: 'grassyMountain_1', scrollFactorX: 0.8, scrollFactorY: 0.1 }
             ];
 
             const extraWidth = 2000; // Buffer to prevent seeing background edges
@@ -947,6 +982,52 @@ export class LevelLoader {
                 tileSprite.tileScaleY = 1;
                 tileSprite.setScrollFactor(0, 0);
                 tileSprite.setDepth(-10 + index); // behind map layers (-10 to -7)
+
+                if (group) {
+                    group.add(tileSprite);
+                }
+                if (uiCamera) {
+                    uiCamera.ignore(tileSprite);
+                }
+                sprites.push(tileSprite);
+            });
+        } else if (preset === 'snowyMountain') {
+            scene.cameras.main.setBackgroundColor('#e9f1f6');
+            const layers = [
+                { key: 'snowyMountain_5', scrollFactorX: 0.02, scrollFactorY: 0.01 },
+                { key: 'snowyMountain_4', scrollFactorX: 0.1,  scrollFactorY: 0.03 },
+                { key: 'snowyMountain_3', scrollFactorX: 0.3,  scrollFactorY: 0.05 },
+                { key: 'snowyMountain_2', scrollFactorX: 0.6,  scrollFactorY: 0.07 },
+                { key: 'snowyMountain_1', scrollFactorX: 0.8,  scrollFactorY: 0.1 }
+            ];
+
+            const extraWidth = 2000; // Buffer to prevent seeing background edges
+            const vh = 279; // standard viewport height at 2.0X zoom
+
+            layers.forEach((layer, index) => {
+                // Ensure texture uses NEAREST filtering for pixel-perfect sharpness
+                const tex = scene.textures.get(layer.key);
+                if (tex) {
+                    tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+                }
+
+                const bgHeight = 324;
+                // Calculate y coordinate to ensure background covers viewport at all camera positions
+                const maxScrollY = Math.max(0, levelHeightPx - vh);
+                const bgY = vh - bgHeight / 2 + maxScrollY * layer.scrollFactorY;
+
+                const tileSprite = scene.add.tileSprite(
+                    levelWidthPx / 2,
+                    bgY,
+                    levelWidthPx + extraWidth,
+                    bgHeight,
+                    layer.key
+                );
+
+                tileSprite.tileScaleX = 1;
+                tileSprite.tileScaleY = 1;
+                tileSprite.setScrollFactor(0, 0);
+                tileSprite.setDepth(-10 + index); // behind map layers (-10 to -6)
 
                 if (group) {
                     group.add(tileSprite);

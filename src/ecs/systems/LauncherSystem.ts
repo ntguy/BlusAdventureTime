@@ -25,12 +25,13 @@ export class LauncherSystem {
                 }
             }
 
+            const lBody = launcherEnt.getComponent<PhysicsBodyComponent>('PhysicsBody')!.body;
             // Launcher bounding box (expanded slightly upwards to reliably catch players/crates landing on/touching it)
             const lBox = {
-                x: transform.x - transform.width / 2,
-                y: transform.y - transform.height / 2 - 2, // expanded 2 pixels up
-                w: transform.width,
-                h: transform.height + 2
+                x: lBody.x,
+                y: lBody.y - 2, // expanded 2 pixels up from physical top
+                w: lBody.width,
+                h: lBody.height + 2
             };
 
             // Check overlap with physics entities (players, crates, etc.)

@@ -5,7 +5,9 @@
     "height": 18,
     "tileWidth": 18,
     "tileHeight": 18,
-    "version": 1
+    "version": 1,
+    "background": "snowyMountain",
+    "backgroundOffsetY": 16
   },
   "layers": {
     "background": [

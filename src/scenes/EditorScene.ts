@@ -76,6 +76,7 @@ export class EditorScene extends Phaser.Scene {
     private entityPalette = [
         { label: 'H', type: 'humanSpawn', color: '#00ff88', name: 'HUMAN SPAWN' },
         { label: 'D', type: 'dogSpawn', color: '#00ffff', name: 'DOG SPAWN' },
+        { label: 'HD', type: 'hd', color: '#e066ff', name: 'HD SPAWN/CHECKPOINT' },
         { label: 'DR', type: 'exitDoor', color: '#ff00ff', name: 'EXIT DOOR' },
         { label: 'CR', type: 'crate', color: '#b5651d', name: 'CRATE' },
         { label: 'KY', type: 'key', color: '#ffff00', name: 'KEY' },
@@ -200,8 +201,13 @@ export class EditorScene extends Phaser.Scene {
             const scrollY = camera.scrollY;
             const vh = camera.height / zoom;
             const maxScrollY = Math.max(0, levelHeightPx - vh);
-            const xScrollFactors = [0.05, 0.2, 0.5, 0.8];
-            const yScrollFactors = [0.05, 0.1, 0.15, 0.2];
+            const isFiveLayer = this.backgroundSprites.length === 5;
+            const xScrollFactors = isFiveLayer
+                ? [0.02, 0.1, 0.3, 0.6, 0.8]
+                : [0.05, 0.2, 0.5, 0.8];
+            const yScrollFactors = isFiveLayer
+                ? [0.02, 0.06, 0.1, 0.15, 0.2]
+                : [0.05, 0.1, 0.15, 0.2];
             const halfWidth = camera.width / 2;
             const halfHeight = camera.height / 2;
 
@@ -314,18 +320,8 @@ export class EditorScene extends Phaser.Scene {
             this.uiCamera.ignore(this.terrainLayer);
         }
 
-        if (this.levelData.meta.background) {
-            this.backgroundSprites = LevelLoader.createParallaxBackground(
-                this,
-                this.levelData.meta.background,
-                this.levelData.meta.width * TILE_SIZE,
-                this.levelData.meta.height * TILE_SIZE,
-                this.workspaceGroup,
-                this.uiCamera
-            );
-        } else {
-            this.cameras.main.setBackgroundColor('#1a1a2e');
-        }
+        // Always use standard editor background color instead of loading the parallax background in editor mode
+        this.cameras.main.setBackgroundColor('#1a1a2e');
 
         const width = this.levelData.meta.width;
         for (let i = 0; i < this.levelData.layers.terrain.length; i++) {
@@ -367,6 +363,7 @@ export class EditorScene extends Phaser.Scene {
         const labels: Record<string, { t: string, c: string }> = {
             humanSpawn: { t: 'H', c: '#00ff88' },
             dogSpawn: { t: 'D', c: '#00ffff' },
+            hd: { t: 'HD', c: '#e066ff' },
             exitDoor: { t: 'DR', c: '#ff00ff' },
             crate: { t: 'CR', c: '#b5651d' },
             key: { t: 'KY', c: '#ffff00' },
@@ -963,11 +960,11 @@ export class EditorScene extends Phaser.Scene {
     }
 
     private playtestLevel(): void {
-        const hasHuman = this.levelData.entities.some(e => e.type === 'humanSpawn');
-        const hasDog = this.levelData.entities.some(e => e.type === 'dogSpawn');
+        const hasHuman = this.levelData.entities.some(e => e.type === 'humanSpawn' || e.type === 'hd');
+        const hasDog = this.levelData.entities.some(e => e.type === 'dogSpawn' || e.type === 'hd');
 
         if (!hasHuman || !hasDog) {
-            alert("Error: Level must contain both a HUMAN SPAWN (H) and DOG SPAWN (D) point before playing!");
+            alert("Error: Level must contain spawn points for both players before playing! Use (H) and (D), or the combined (HD) spawn!");
             return;
         }
 
@@ -1803,7 +1800,7 @@ export class EditorScene extends Phaser.Scene {
             // HTML Form Dialog
             this.showPropertyForm("Level Properties", [
                 { key: 'name', label: 'Level Name', type: 'text', value: String(this.levelData.meta.name || "level") },
-                { key: 'background', label: 'Background Preset', type: 'select', options: ['None', 'grassyMountain'], value: String(this.levelData.meta.background || "None") },
+                { key: 'background', label: 'Background Preset', type: 'select', options: ['None', 'grassyMountain', 'snowyMountain'], value: String(this.levelData.meta.background || "None") },
                 { key: 'offsetY', label: 'Background Y Offset (px)', type: 'text', value: String(this.levelData.meta.backgroundOffsetY || "0") }
             ], (values) => {
                 const cleanName = values.name.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -2146,7 +2143,7 @@ export class EditorScene extends Phaser.Scene {
 
                 if (item.type === 'entity') {
                     const labels: Record<string, string> = {
-                        humanSpawn: 'H', dogSpawn: 'D', exitDoor: 'DR', crate: 'CR', key: 'KY',
+                        humanSpawn: 'H', dogSpawn: 'D', hd: 'HD', exitDoor: 'DR', crate: 'CR', key: 'KY',
                         checkpoint: 'CP', ladder: 'LD', button: 'BT', gate: 'GT', launcher: 'LN',
                         cat: 'CT', sign: 'SN', spikes: 'SP', movingPlatform: 'MP', flying: 'FL'
                     };
@@ -2200,7 +2197,7 @@ export class EditorScene extends Phaser.Scene {
                 this.levelData.entities = this.levelData.entities.filter(e => e !== entity);
 
                 const labels: Record<string, string> = {
-                    humanSpawn: 'H', dogSpawn: 'D', exitDoor: 'DR', crate: 'CR', key: 'KY',
+                    humanSpawn: 'H', dogSpawn: 'D', hd: 'HD', exitDoor: 'DR', crate: 'CR', key: 'KY',
                     checkpoint: 'CP', ladder: 'LD', button: 'BT', gate: 'GT', launcher: 'LN',
                     cat: 'CT', sign: 'SN', spikes: 'SP', movingPlatform: 'MP', flying: 'FL'
                 };

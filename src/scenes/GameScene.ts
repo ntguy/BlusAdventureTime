@@ -163,8 +163,13 @@ export class GameScene extends Phaser.Scene {
             const scrollY = camera.scrollY;
             const vh = camera.height / zoom;
             const maxScrollY = Math.max(0, levelHeightPx - vh);
-            const xScrollFactors = [0.05, 0.2, 0.5, 0.8];
-            const yScrollFactors = [0.05, 0.1, 0.15, 0.2];
+            const isFiveLayer = this.backgroundSprites.length === 5;
+            const xScrollFactors = isFiveLayer
+                ? [0.02, 0.1, 0.3, 0.6, 0.8]
+                : [0.05, 0.2, 0.5, 0.8];
+            const yScrollFactors = isFiveLayer
+                ? [0.02, 0.06, 0.1, 0.15, 0.2]
+                : [0.05, 0.1, 0.15, 0.2];
             const halfWidth = camera.width / 2;
             const halfHeight = camera.height / 2;
 

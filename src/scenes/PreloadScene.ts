@@ -58,6 +58,13 @@ export class PreloadScene extends Phaser.Scene {
         this.load.image('grassyMountain_3', 'assets/backgrounds/grassyMountain/Plan 3.png');
         this.load.image('grassyMountain_4', 'assets/backgrounds/grassyMountain/Plan 4.png');
 
+        // Load snowyMountain parallax layers
+        this.load.image('snowyMountain_1', 'assets/backgrounds/snowyMountain/Plan 1.png');
+        this.load.image('snowyMountain_2', 'assets/backgrounds/snowyMountain/Plan 2.png');
+        this.load.image('snowyMountain_3', 'assets/backgrounds/snowyMountain/Plan 3.png');
+        this.load.image('snowyMountain_4', 'assets/backgrounds/snowyMountain/Plan 4.png');
+        this.load.image('snowyMountain_5', 'assets/backgrounds/snowyMountain/Plan 5.png');
+
         // Load Blu dog spritesheet (16x16 frames)
         this.load.spritesheet('bluSpritesheet', 'assets/sprites/bluSpritesheet.png', {
             frameWidth: 16,
