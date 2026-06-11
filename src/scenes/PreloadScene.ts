@@ -52,6 +52,12 @@ export class PreloadScene extends Phaser.Scene {
         // Load custom full-screen background image
         this.load.image('default_bg', 'assets/backgrounds/default_bg.png');
 
+        // Load grassyMountain parallax layers
+        this.load.image('grassyMountain_1', 'assets/backgrounds/grassyMountain/Plan 1.png');
+        this.load.image('grassyMountain_2', 'assets/backgrounds/grassyMountain/Plan 2.png');
+        this.load.image('grassyMountain_3', 'assets/backgrounds/grassyMountain/Plan 3.png');
+        this.load.image('grassyMountain_4', 'assets/backgrounds/grassyMountain/Plan 4.png');
+
         // Load Blu dog spritesheet (16x16 frames)
         this.load.spritesheet('bluSpritesheet', 'assets/sprites/bluSpritesheet.png', {
             frameWidth: 16,
@@ -92,8 +98,10 @@ export class PreloadScene extends Phaser.Scene {
         this.load.audio('sfx_grumble', 'assets/audio/sfx/grumble.mp3');
 
         // ── Level data ──
-        // Load the single placeholder level JSON
         this.load.json('test_level', 'assets/levels/test_level.json');
+        this.load.json('Lvl1-Jun8', 'assets/levels/Lvl1-Jun8.json');
+        this.load.json('Lvl2-Jun9', 'assets/levels/Lvl2-Jun9.json');
+        this.load.json('Lvl1--6-4', 'assets/levels/Lvl1--6-4.json');
     }
 
     create(): void {

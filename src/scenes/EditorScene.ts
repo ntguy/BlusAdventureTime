@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT, TILE_SIZE, BG_TILE_SIZE } from '../constants';
 import { LevelData, EntityData } from '../levels/LevelSchema';
+import { LevelLoader } from '../levels/LevelLoader';
 
 export class EditorScene extends Phaser.Scene {
     private levelData!: LevelData;
@@ -50,6 +51,7 @@ export class EditorScene extends Phaser.Scene {
     private paletteTexts: Phaser.GameObjects.Text[] = [];
     private entityVisuals: Map<string, Phaser.GameObjects.Text> = new Map();
     private bgOverlays: Map<string, Phaser.GameObjects.Text> = new Map();
+    private backgroundSprites?: Phaser.GameObjects.TileSprite[];
 
     private selectedEntity: EntityData | null = null;
     private selectedEntityText!: Phaser.GameObjects.Text;
@@ -188,6 +190,38 @@ export class EditorScene extends Phaser.Scene {
 
         this.cameras.main.scrollX = Phaser.Math.Clamp(this.cameras.main.scrollX, minScrollX, maxScrollXBound);
         this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY, minScrollY, maxScrollYBound);
+
+        // Update background positions dynamically based on current zoom and scrollX/Y to ensure perfect pixel alignment
+        if (this.backgroundSprites) {
+            const camera = this.cameras.main;
+            const levelHeightPx = this.levelData.meta.height * TILE_SIZE;
+            const zoom = camera.zoom;
+            const scrollX = camera.scrollX;
+            const scrollY = camera.scrollY;
+            const vh = camera.height / zoom;
+            const maxScrollY = Math.max(0, levelHeightPx - vh);
+            const xScrollFactors = [0.05, 0.2, 0.5, 0.8];
+            const yScrollFactors = [0.05, 0.1, 0.15, 0.2];
+            const halfWidth = camera.width / 2;
+            const halfHeight = camera.height / 2;
+
+            this.backgroundSprites.forEach((sprite, index) => {
+                const scrollFactorX = xScrollFactors[index] || 0;
+                const scrollFactorY = yScrollFactors[index] || 0;
+
+                // Adjust tile scale to be constant in screen-space (1.0X screen scale)
+                sprite.tileScaleX = 1.0 / zoom;
+                sprite.tileScaleY = 1.0 / zoom;
+
+                // Set dynamic height matching the texture scale to prevent vertical repeating
+                sprite.height = 324 * sprite.tileScaleY;
+                const bgHeight = sprite.height;
+
+                // Position the background smoothly without snapping to avoid jagged scrolling
+                sprite.x = halfWidth - scrollX * scrollFactorX;
+                sprite.y = halfHeight / zoom + halfHeight - TILE_SIZE - bgHeight / 2 + (maxScrollY - scrollY) * scrollFactorY - (this.levelData.meta.backgroundOffsetY || 0);
+            });
+        }
     }
 
     private createDefaultLevel(): LevelData {
@@ -280,7 +314,18 @@ export class EditorScene extends Phaser.Scene {
             this.uiCamera.ignore(this.terrainLayer);
         }
 
-        this.cameras.main.setBackgroundColor('#1a1a2e');
+        if (this.levelData.meta.background) {
+            this.backgroundSprites = LevelLoader.createParallaxBackground(
+                this,
+                this.levelData.meta.background,
+                this.levelData.meta.width * TILE_SIZE,
+                this.levelData.meta.height * TILE_SIZE,
+                this.workspaceGroup,
+                this.uiCamera
+            );
+        } else {
+            this.cameras.main.setBackgroundColor('#1a1a2e');
+        }
 
         const width = this.levelData.meta.width;
         for (let i = 0; i < this.levelData.layers.terrain.length; i++) {
@@ -445,15 +490,17 @@ export class EditorScene extends Phaser.Scene {
 
         // Action buttons
         const actionRowY = 46;
-        const actPlay = this.createSidebarButton("🎮PLAY", startX + 35, actionRowY, () => this.playtestLevel());
-        const actSave = this.createSidebarButton("💾SAVE", startX + 90, actionRowY, () => this.saveLevel());
-        const actLoad = this.createSidebarButton("📂LOAD", startX + 145, actionRowY, () => this.loadLevel());
-        const actNew  = this.createSidebarButton("📄NEW", startX + 195, actionRowY, () => this.clearToNewLevel());
-        const actExit = this.createSidebarButton("🚪EXIT", startX + 245, actionRowY, () => this.exitEditor());
+        const actPlay = this.createSidebarButton("PLAY", startX + 30, actionRowY, () => this.playtestLevel());
+        const actSave = this.createSidebarButton("SAVE", startX + 75, actionRowY, () => this.saveLevel());
+        const actLoad = this.createSidebarButton("LOAD", startX + 120, actionRowY, () => this.loadLevel());
+        const actLevel = this.createSidebarButton("LEVEL", startX + 170, actionRowY, () => this.editLevelProperties());
+        const actNew  = this.createSidebarButton("NEW", startX + 215, actionRowY, () => this.clearToNewLevel());
+        const actExit = this.createSidebarButton("EXIT", startX + 255, actionRowY, () => this.exitEditor());
 
         this.uiGroup.add(actPlay);
         this.uiGroup.add(actSave);
         this.uiGroup.add(actLoad);
+        this.uiGroup.add(actLevel);
         this.uiGroup.add(actNew);
         this.uiGroup.add(actExit);
 
@@ -1720,7 +1767,68 @@ export class EditorScene extends Phaser.Scene {
         if (firstInput) firstInput.focus();
     }
 
+    private editLevelProperties(): void {
+        const useNativePrompts = !!navigator.webdriver;
 
+        if (useNativePrompts) {
+            // Native Prompts fallback for automated tests
+            const name = prompt("Enter Level Name:", String(this.levelData.meta.name || "level"));
+            if (name === null) return;
+            const background = prompt("Enter Background Preset (None or name):", String(this.levelData.meta.background || "None"));
+            if (background === null) return;
+            const offsetYStr = prompt("Enter Background Y Offset (pixels):", String(this.levelData.meta.backgroundOffsetY || "0"));
+            if (offsetYStr === null) return;
+
+            const cleanName = name.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+            if (cleanName) {
+                this.levelData.meta.name = cleanName;
+            }
+            const cleanBg = background.trim();
+            const oldBg = this.levelData.meta.background;
+            if (cleanBg.toLowerCase() === 'none' || !cleanBg) {
+                delete this.levelData.meta.background;
+            } else {
+                this.levelData.meta.background = cleanBg;
+            }
+
+            const offsetYVal = parseInt(offsetYStr.trim()) || 0;
+            const oldOffsetY = this.levelData.meta.backgroundOffsetY;
+            this.levelData.meta.backgroundOffsetY = offsetYVal;
+
+            this.sound.play('sfx_checkpoint', { volume: 0.3 });
+            if (this.levelData.meta.background !== oldBg || this.levelData.meta.backgroundOffsetY !== oldOffsetY) {
+                this.scene.start('EditorScene', { levelData: this.levelData });
+            }
+        } else {
+            // HTML Form Dialog
+            this.showPropertyForm("Level Properties", [
+                { key: 'name', label: 'Level Name', type: 'text', value: String(this.levelData.meta.name || "level") },
+                { key: 'background', label: 'Background Preset', type: 'select', options: ['None', 'grassyMountain'], value: String(this.levelData.meta.background || "None") },
+                { key: 'offsetY', label: 'Background Y Offset (px)', type: 'text', value: String(this.levelData.meta.backgroundOffsetY || "0") }
+            ], (values) => {
+                const cleanName = values.name.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+                if (cleanName) {
+                    this.levelData.meta.name = cleanName;
+                }
+                const bgVal = values.background.trim();
+                const oldBg = this.levelData.meta.background;
+                if (bgVal === 'None' || !bgVal) {
+                    delete this.levelData.meta.background;
+                } else {
+                    this.levelData.meta.background = bgVal;
+                }
+
+                const offsetYVal = parseInt(values.offsetY.trim()) || 0;
+                const oldOffsetY = this.levelData.meta.backgroundOffsetY;
+                this.levelData.meta.backgroundOffsetY = offsetYVal;
+
+                this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                if (this.levelData.meta.background !== oldBg || this.levelData.meta.backgroundOffsetY !== oldOffsetY) {
+                    this.scene.start('EditorScene', { levelData: this.levelData });
+                }
+            });
+        }
+    }
 
     private drawGridResizingButtons(): void {
         this.gridButtons.forEach(btn => btn.destroy());

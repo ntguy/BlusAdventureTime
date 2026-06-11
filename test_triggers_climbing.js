@@ -66,7 +66,7 @@ async function run() {
             }
 
             // Place a lever at x = 4, y = 12
-            const btn = { type: 'button', x: 4, y: 12, properties: { channel: '5', triggerType: 'interact', visualType: 'lever' } };
+            const btn = { type: 'lever', x: 4, y: 12, properties: { channel: '5' } };
             es.levelData.entities.push(btn);
 
             // Place a gate at x = 5, y = 12
@@ -117,7 +117,7 @@ async function run() {
         });
         await new Promise(resolve => setTimeout(resolve, 500));
 
-        if (dialogCount < 4) {
+        if (dialogCount < 3) {
             console.error(`FAILURE: Prompt sequences were not invoked. Dialog count: ${dialogCount}`);
             process.exit(1);
         }

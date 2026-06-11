@@ -1,11 +1,13 @@
 import Phaser from 'phaser';
 import { InputManager } from '../input/InputManager';
 import { AudioManager } from '../audio/AudioManager';
+import { TILE_SIZE } from '../constants';
 
 // ECS Architecture & Loader
 import { EntityManager, Entity } from '../ecs/Entity';
 import { PhysicsBodyComponent } from '../ecs/components';
 import { LevelLoader } from '../levels/LevelLoader';
+import { LevelData } from '../levels/LevelSchema';
 import { MovementSystem } from '../ecs/systems/MovementSystem';
 import { PhysicsSystem } from '../ecs/systems/PhysicsSystem';
 import { RenderSystem } from '../ecs/systems/RenderSystem';
@@ -53,6 +55,8 @@ export class GameScene extends Phaser.Scene {
     // Playtest mode states
     private isTestMode: boolean = false;
     private playtestLevelData: any = null;
+    private backgroundSprites?: Phaser.GameObjects.TileSprite[];
+    private backgroundOffsetY: number = 0;
 
     constructor() {
         super({ key: 'GameScene' });
@@ -67,11 +71,19 @@ export class GameScene extends Phaser.Scene {
 
         // Load level terrain, backgrounds, and player entities via LevelLoader
         const levelKeyOrData = data?.levelData || data?.levelKey || 'test_level';
-        const { levelWidthPx, levelHeightPx, player1Entity, player2Entity } = LevelLoader.loadLevel(
+
+        // Extract backgroundOffsetY from level JSON
+        const levelData = typeof levelKeyOrData === 'string'
+            ? (this.cache.json.get(levelKeyOrData) as LevelData)
+            : levelKeyOrData;
+        this.backgroundOffsetY = levelData?.meta?.backgroundOffsetY || 0;
+
+        const { levelWidthPx, levelHeightPx, player1Entity, player2Entity, backgroundSprites } = LevelLoader.loadLevel(
             this,
             levelKeyOrData,
             this.entityManager,
         );
+        this.backgroundSprites = backgroundSprites;
 
         this.player1Entity = player1Entity;
         this.player2Entity = player2Entity;
@@ -141,6 +153,45 @@ export class GameScene extends Phaser.Scene {
 
         // Camera
         this.cameraSystem.update(this.entityManager, delta);
+
+        // Update background positions dynamically based on current zoom and scrollX/Y to ensure perfect pixel alignment
+        if (this.backgroundSprites) {
+            const camera = this.cameras.main;
+            const levelHeightPx = this.physics.world.bounds.height;
+            const zoom = camera.zoom;
+            const scrollX = camera.scrollX;
+            const scrollY = camera.scrollY;
+            const vh = camera.height / zoom;
+            const maxScrollY = Math.max(0, levelHeightPx - vh);
+            const xScrollFactors = [0.05, 0.2, 0.5, 0.8];
+            const yScrollFactors = [0.05, 0.1, 0.15, 0.2];
+            const halfWidth = camera.width / 2;
+            const halfHeight = camera.height / 2;
+
+            this.backgroundSprites.forEach((sprite, index) => {
+                const scrollFactorX = xScrollFactors[index] || 0;
+                const scrollFactorY = yScrollFactors[index] || 0;
+
+                // Adjust tile scale to be constant in screen-space (1.0X screen scale)
+                sprite.tileScaleX = 1.0 / zoom;
+                sprite.tileScaleY = 1.0 / zoom;
+
+                // Set dynamic height matching the texture scale to prevent vertical repeating
+                sprite.height = 324 * sprite.tileScaleY;
+                const bgHeight = sprite.height;
+
+                // Position the background smoothly without snapping to avoid jagged scrolling
+                sprite.x = halfWidth - scrollX * scrollFactorX;
+                sprite.y = halfHeight / zoom + halfHeight - TILE_SIZE - bgHeight / 2 + (maxScrollY - scrollY) * scrollFactorY - this.backgroundOffsetY;
+            });
+            if (time % 100 < delta) {
+                console.log("GameScene BG SPRITES X:", JSON.stringify(this.backgroundSprites.map(s => s.x)), "Y:", JSON.stringify(this.backgroundSprites.map(s => s.y)), "scrollX/Y:", scrollX, scrollY, "zoom:", zoom);
+            }
+        } else {
+            if (time % 100 < delta) {
+                console.log("GameScene BG SPRITES IS UNDEFINED!");
+            }
+        }
 
         // FPS
         if (this.showFps) {

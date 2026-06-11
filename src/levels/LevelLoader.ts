@@ -37,6 +37,7 @@ export class LevelLoader {
         terrainLayer: Phaser.Tilemaps.TilemapLayer;
         player1Entity: Entity;
         player2Entity: Entity;
+        backgroundSprites?: Phaser.GameObjects.TileSprite[];
     } {
         // 1. Get level data from cache or use raw data
         const levelData = typeof levelKeyOrData === 'string' 
@@ -50,10 +51,21 @@ export class LevelLoader {
         const levelWidthPx = levelData.meta.width * TILE_SIZE;
         const levelHeightPx = levelData.meta.height * TILE_SIZE;
 
-        scene.cameras.main.setBackgroundColor('#1a1a2e');
-
-        // 2. Create background
-        this.createBackground(scene, levelData.meta.width, levelData.meta.height);
+        let backgroundSprites: Phaser.GameObjects.TileSprite[] | undefined;
+        if (levelData.meta.background) {
+            backgroundSprites = this.createParallaxBackground(
+                scene,
+                levelData.meta.background,
+                levelWidthPx,
+                levelHeightPx,
+                undefined,
+                undefined
+            );
+        } else {
+            scene.cameras.main.setBackgroundColor('#1a1a2e');
+            // 2. Create background
+            this.createBackground(scene, levelData.meta.width, levelData.meta.height);
+        }
 
         // 3. Create tilemap
         const map = scene.make.tilemap({
@@ -886,7 +898,66 @@ export class LevelLoader {
             terrainLayer,
             player1Entity,
             player2Entity,
+            backgroundSprites
         };
+    }
+
+    public static createParallaxBackground(
+        scene: Phaser.Scene,
+        preset: string,
+        levelWidthPx: number,
+        levelHeightPx: number,
+        group?: Phaser.GameObjects.Group,
+        uiCamera?: Phaser.Cameras.Scene2D.Camera
+    ): Phaser.GameObjects.TileSprite[] {
+        const sprites: Phaser.GameObjects.TileSprite[] = [];
+        if (preset === 'grassyMountain') {
+            scene.cameras.main.setBackgroundColor('#c9d7e7');
+            const layers = [
+                { key: 'grassyMountain_4', scrollFactorX: 0.05, scrollFactorY: 0.05 },
+                { key: 'grassyMountain_3', scrollFactorX: 0.2, scrollFactorY: 0.1 },
+                { key: 'grassyMountain_2', scrollFactorX: 0.5, scrollFactorY: 0.15 },
+                { key: 'grassyMountain_1', scrollFactorX: 0.8, scrollFactorY: 0.2 }
+            ];
+
+            const extraWidth = 2000; // Buffer to prevent seeing background edges
+            const vh = 279; // standard viewport height at 2.0X zoom
+
+            layers.forEach((layer, index) => {
+                // Ensure texture uses NEAREST filtering for pixel-perfect sharpness
+                const tex = scene.textures.get(layer.key);
+                if (tex) {
+                    tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+                }
+
+                const bgHeight = 324;
+                // Calculate y coordinate to ensure background covers viewport at all camera positions
+                const maxScrollY = Math.max(0, levelHeightPx - vh);
+                const bgY = vh - bgHeight / 2 + maxScrollY * layer.scrollFactorY;
+
+                const tileSprite = scene.add.tileSprite(
+                    levelWidthPx / 2,
+                    bgY,
+                    levelWidthPx + extraWidth,
+                    bgHeight,
+                    layer.key
+                );
+
+                tileSprite.tileScaleX = 1;
+                tileSprite.tileScaleY = 1;
+                tileSprite.setScrollFactor(0, 0);
+                tileSprite.setDepth(-10 + index); // behind map layers (-10 to -7)
+
+                if (group) {
+                    group.add(tileSprite);
+                }
+                if (uiCamera) {
+                    uiCamera.ignore(tileSprite);
+                }
+                sprites.push(tileSprite);
+            });
+        }
+        return sprites;
     }
 
     private static createBackground(scene: Phaser.Scene, levelWidthTiles: number, levelHeightTiles: number): void {

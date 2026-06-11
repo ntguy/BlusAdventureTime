@@ -6,6 +6,7 @@ export interface LevelMeta {
     tileHeight: number;     // always 18
     version: number;        // schema version for future migrations
     background?: string;    // parallax preset name
+    backgroundOffsetY?: number; // parallax vertical offset in world pixels (positive shifts background up)
 }
 
 export interface EntityData {
