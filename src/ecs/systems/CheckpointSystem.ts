@@ -139,14 +139,16 @@ export class CheckpointSystem {
                 checkpoint.showingAlt = !checkpoint.showingAlt;
 
                 if (sprite && typeof sprite.setFrame === 'function') {
+                    const getFrame = (gid: number) => {
+                        if (gid >= 180) return gid - 180;
+                        return gid;
+                    };
                     if (checkpoint.showingAlt) {
                         const altGid = checkpoint.flickerTile;
-                        const frame = altGid >= 180 ? altGid - 180 : altGid;
-                        sprite.setFrame(frame);
+                        sprite.setFrame(getFrame(altGid));
                     } else {
                         const idleGid = render.idleFrame !== undefined ? render.idleFrame : 111;
-                        const frame = idleGid >= 180 ? idleGid - 180 : idleGid;
-                        sprite.setFrame(frame);
+                        sprite.setFrame(getFrame(idleGid));
                     }
                 }
             }

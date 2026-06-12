@@ -3,6 +3,10 @@ export const TILESET_COLS = 20;
 export const TILESET_ROWS = 9;
 export const TILESET_TOTAL = 180;
 
+export const FALL_TILESET_COLS = 16;
+export const FALL_TILESET_ROWS = 7;
+export const FALL_TILESET_TOTAL = 112;
+
 export const GAME_WIDTH = 954;   // 53 tiles at 18px
 export const GAME_HEIGHT = 558;  // 31 tiles at 18px
 
@@ -54,10 +58,7 @@ export const CAMERA = {
     playerPaddingY: 30,
 } as const;
 
-// Background tileset (Kenney Pixel Platformer backgrounds)
-export const BG_TILE_SIZE = 24;
-export const BG_TILESET_COLS = 8;
-export const BG_TILESET_ROWS = 3;
+
 
 // Audio SFX keys — maps logical sounds to file paths
 // All currently point to collect1.mp3 as placeholder

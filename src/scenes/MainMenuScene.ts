@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, BG_TILE_SIZE } from '../constants';
+import { GAME_WIDTH, GAME_HEIGHT } from '../constants';
 
 export class MainMenuScene extends Phaser.Scene {
     private selectedIndex: number = 0;
@@ -19,8 +19,9 @@ export class MainMenuScene extends Phaser.Scene {
         const width = GAME_WIDTH;
         const height = GAME_HEIGHT;
 
-        // Static background tiling
-        this.createBackground();
+        // Static background
+        const bg = this.add.image(width / 2, height / 2, 'default_bg');
+        bg.setDisplaySize(width, height);
 
         // Dark overlay
         const overlay = this.add.graphics();
@@ -119,37 +120,4 @@ export class MainMenuScene extends Phaser.Scene {
         });
     }
 
-    private createBackground(): void {
-        const SKY_TILES = [0, 1];
-        const MID_TILES = [8, 9];
-        const GROUND_TILES = [16, 17];
-
-        const cols = Math.ceil(GAME_WIDTH / BG_TILE_SIZE);
-        const rows = Math.ceil(GAME_HEIGHT / BG_TILE_SIZE);
-
-        const midRow = rows - 3;
-        const groundRow = rows - 2;
-
-        const getTile = (arr: number[], index: number) => arr[((index % arr.length) + arr.length) % arr.length];
-
-        for (let y = 0; y < rows; y++) {
-            for (let x = 0; x < cols; x++) {
-                let tileIndex: number;
-                if (y === midRow) {
-                    tileIndex = getTile(MID_TILES, x);
-                } else if (y >= groundRow) {
-                    tileIndex = getTile(GROUND_TILES, x);
-                } else {
-                    tileIndex = getTile(SKY_TILES, x);
-                }
-
-                this.add.sprite(
-                    x * BG_TILE_SIZE + BG_TILE_SIZE / 2,
-                    y * BG_TILE_SIZE + BG_TILE_SIZE / 2,
-                    'bg_tilemap_packed',
-                    tileIndex,
-                );
-            }
-        }
-    }
 }

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { TILE_SIZE, BG_TILE_SIZE, VISUAL_FAMILIES } from '../constants';
+import { TILE_SIZE, VISUAL_FAMILIES } from '../constants';
 import { LevelData, EntityData } from './LevelSchema';
 import { EntityManager, Entity } from '../ecs/Entity';
 import { createPlayerEntity } from '../entities/PlayerFactory';
@@ -65,8 +65,6 @@ export class LevelLoader {
             );
         } else {
             scene.cameras.main.setBackgroundColor('#1a1a2e');
-            // 2. Create background
-            this.createBackground(scene, levelData.meta.width, levelData.meta.height);
         }
 
         // 3. Create tilemap
@@ -85,22 +83,22 @@ export class LevelLoader {
             0 // GID starts at 0
         );
 
-        const bgTileset = map.addTilesetImage(
-            'bg_tilemap_packed',
-            'bg_tilemap_packed',
-            BG_TILE_SIZE, BG_TILE_SIZE,
+        const fallTileset = map.addTilesetImage(
+            'tilemap_packed_fall',
+            'tilemap_packed_fall',
+            TILE_SIZE, TILE_SIZE,
             0, 0,
             180 // GID starts at 180
         );
 
-        if (!tileset || !bgTileset) {
+        if (!tileset || !fallTileset) {
             throw new Error('Failed to create tileset');
         }
 
-        // 4. Create layers and fill (bind both tilesets to background layer)
-        const bgLayer = map.createBlankLayer('background', [tileset, bgTileset], 0, 0);
-        const terrainLayer = map.createBlankLayer('terrain', tileset, 0, 0);
-        const fgLayer = map.createBlankLayer('foreground', tileset, 0, 0);
+        // 4. Create layers and fill
+        const bgLayer = map.createBlankLayer('background', [tileset, fallTileset], 0, 0);
+        const terrainLayer = map.createBlankLayer('terrain', [tileset, fallTileset], 0, 0);
+        const fgLayer = map.createBlankLayer('foreground', [tileset, fallTileset], 0, 0);
 
         if (!bgLayer || !terrainLayer || !fgLayer) {
             throw new Error('Failed to create tilemap layers');
@@ -179,7 +177,8 @@ export class LevelLoader {
             }
 
             const getFrame = (gid: number) => {
-                return gid >= 180 ? gid - 180 : gid;
+                if (gid >= 180) return gid - 180;
+                return gid;
             };
 
             // Helper to get overridden texture/frame or default values
@@ -187,14 +186,16 @@ export class LevelLoader {
                 if (hasBGOverride) {
                     const localIdle = overrideIdleFrame !== undefined ? getFrame(overrideIdleFrame) : getFrame(tileIndex);
                     const localActive = overrideActiveFrame !== undefined ? getFrame(overrideActiveFrame) : localIdle;
+                    let tex = tileIndex >= 180 ? 'tilemap_packed_fall' : 'tilemap_packed';
                     return {
-                        texture: tileIndex >= 180 ? 'bg_tilemap_packed' : 'tilemap_packed',
+                        texture: tex,
                         frame: localIdle,
                         activeFrame: localActive
                     };
                 }
+                let defaultTexture = defaultFrame >= 180 ? 'tilemap_packed_fall' : 'tilemap_packed';
                 return {
-                    texture: 'tilemap_packed',
+                    texture: defaultTexture,
                     frame: getFrame(defaultFrame),
                     activeFrame: defaultActiveFrame !== undefined ? getFrame(defaultActiveFrame) : getFrame(defaultFrame)
                 };
@@ -1106,40 +1107,7 @@ export class LevelLoader {
         return sprites;
     }
 
-    private static createBackground(scene: Phaser.Scene, levelWidthTiles: number, levelHeightTiles: number): void {
-        const SKY_TILES = [0, 1];
-        const MID_TILES = [8, 9];
-        const GROUND_TILES = [16, 17];
 
-        const bgWidthTiles = Math.ceil((levelWidthTiles * TILE_SIZE) / BG_TILE_SIZE) + 1;
-        const bgHeightTiles = Math.ceil((levelHeightTiles * TILE_SIZE) / BG_TILE_SIZE) + 1;
-
-        const midRow = bgHeightTiles - 2;
-        const groundRow = bgHeightTiles - 1;
-
-        const getTile = (arr: number[], index: number) => arr[((index % arr.length) + arr.length) % arr.length];
-
-        for (let y = -20; y < bgHeightTiles + 20; y++) {
-            for (let x = -25; x < bgWidthTiles + 25; x++) {
-                let tileIndex: number;
-                if (y === midRow) {
-                    tileIndex = getTile(MID_TILES, x);
-                } else if (y >= groundRow) {
-                    tileIndex = getTile(GROUND_TILES, x);
-                } else {
-                    tileIndex = getTile(SKY_TILES, x);
-                }
-
-                const sprite = scene.add.sprite(
-                    x * BG_TILE_SIZE + BG_TILE_SIZE / 2,
-                    y * BG_TILE_SIZE + BG_TILE_SIZE / 2,
-                    'bg_tilemap_packed',
-                    tileIndex,
-                );
-                sprite.setDepth(0);
-            }
-        }
-    }
 
     private static fillLayer(
         layer: Phaser.Tilemaps.TilemapLayer,

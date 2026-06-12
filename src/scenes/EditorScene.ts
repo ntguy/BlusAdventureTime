@@ -1,5 +1,4 @@
-import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, TILE_SIZE, BG_TILE_SIZE } from '../constants';
+import { GAME_WIDTH, GAME_HEIGHT, TILE_SIZE } from '../constants';
 import { LevelData, EntityData } from '../levels/LevelSchema';
 import { LevelLoader } from '../levels/LevelLoader';
 
@@ -305,10 +304,10 @@ export class EditorScene extends Phaser.Scene {
         });
 
         const tileset = this.map.addTilesetImage('tilemap_packed', 'tilemap_packed', TILE_SIZE, TILE_SIZE, 0, 0, 0)!;
-        const bgTileset = this.map.addTilesetImage('bg_tilemap_packed', 'bg_tilemap_packed', BG_TILE_SIZE, BG_TILE_SIZE, 0, 0, 180)!;
+        const fallTileset = this.map.addTilesetImage('tilemap_packed_fall', 'tilemap_packed_fall', TILE_SIZE, TILE_SIZE, 0, 0, 180)!;
 
-        this.bgLayer = this.map.createBlankLayer('background', [tileset, bgTileset], 0, 0)!;
-        this.terrainLayer = this.map.createBlankLayer('terrain', tileset, 0, 0)!;
+        this.bgLayer = this.map.createBlankLayer('background', [tileset, fallTileset], 0, 0)!;
+        this.terrainLayer = this.map.createBlankLayer('terrain', [tileset, fallTileset], 0, 0)!;
 
         this.bgLayer.setDepth(2);
         this.terrainLayer.setDepth(1);
@@ -2104,9 +2103,9 @@ export class EditorScene extends Phaser.Scene {
     private getTileConfig(gid: number): { texture: string, frame: number, scale: number } {
         if (gid >= 180) {
             return {
-                texture: 'bg_tilemap_packed',
+                texture: 'tilemap_packed_fall',
                 frame: gid - 180,
-                scale: 1.1
+                scale: 1.5
             };
         } else {
             return {
@@ -2471,14 +2470,16 @@ export class EditorScene extends Phaser.Scene {
     }
 
     private loadTileTags(): void {
-        const defaultTags: Record<string, number[]> = {
-            background: Array.from({ length: 24 }, (_, i) => 180 + i)
-        };
+        const defaultTags: Record<string, number[]> = {};
 
         try {
             const data = localStorage.getItem('blu_tile_tags');
             if (data) {
                 this.tileTags = JSON.parse(data);
+                if (this.tileTags.background) {
+                    delete this.tileTags.background;
+                    this.saveTileTags();
+                }
             } else {
                 this.tileTags = defaultTags;
                 this.saveTileTags();
@@ -2499,10 +2500,12 @@ export class EditorScene extends Phaser.Scene {
 
     private getFilteredTiles(): { gid: number; texture: string; frame: number; scale: number }[] {
         const allTiles: number[] = [];
-        for (let i = 180; i <= 203; i++) {
+        // standard tiles first
+        for (let i = 0; i <= 179; i++) {
             allTiles.push(i);
         }
-        for (let i = 0; i <= 179; i++) {
+        // tilemap_packed_fall tiles second
+        for (let i = 180; i <= 291; i++) {
             allTiles.push(i);
         }
 
@@ -2767,8 +2770,8 @@ export class EditorScene extends Phaser.Scene {
 
             const taggedGids = this.tileTags[activeTag] || [];
             const allTiles: number[] = [];
-            for (let i = 180; i <= 203; i++) allTiles.push(i);
             for (let i = 0; i <= 179; i++) allTiles.push(i);
+            for (let i = 180; i <= 291; i++) allTiles.push(i);
 
             allTiles.forEach(gid => {
                 const isTagged = taggedGids.includes(gid);
@@ -2785,11 +2788,24 @@ export class EditorScene extends Phaser.Scene {
                 cell.style.cursor = 'pointer';
                 cell.style.userSelect = 'none';
 
-                const col = gid >= 180 ? (gid - 180) % 8 : gid % 20;
-                const rowNum = gid >= 180 ? Math.floor((gid - 180) / 8) : Math.floor(gid / 20);
-                const bgSize = gid >= 180 ? '288px 108px' : '720px 324px';
-                const bgPos = `${-(col * 36)}px ${-(rowNum * 36)}px`;
-                const bgImg = gid >= 180 ? 'assets/backgrounds/tilemap-backgrounds_packed.png' : 'assets/tilesets/tilemap_packed.png';
+                let col: number;
+                let rowNum: number;
+                let bgSize: string;
+                let bgPos: string;
+                let bgImg: string;
+
+                if (gid >= 180) {
+                    col = (gid - 180) % 16;
+                    rowNum = Math.floor((gid - 180) / 16);
+                    bgSize = '576px 252px';
+                    bgImg = 'assets/tilesets/tilemap_packed_fall.png';
+                } else {
+                    col = gid % 20;
+                    rowNum = Math.floor(gid / 20);
+                    bgSize = '720px 324px';
+                    bgImg = 'assets/tilesets/tilemap_packed.png';
+                }
+                bgPos = `${-(col * 36)}px ${-(rowNum * 36)}px`;
 
                 const thumb = document.createElement('div');
                 thumb.style.width = '36px';

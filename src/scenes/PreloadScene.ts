@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { TILE_SIZE, TILESET_COLS, TILESET_ROWS, BG_TILE_SIZE, BG_TILESET_COLS, BG_TILESET_ROWS, GAME_WIDTH, GAME_HEIGHT, SFX } from '../constants';
+import { TILE_SIZE, TILESET_COLS, TILESET_ROWS, FALL_TILESET_COLS, FALL_TILESET_ROWS, GAME_WIDTH, GAME_HEIGHT, SFX } from '../constants';
 
 export class PreloadScene extends Phaser.Scene {
     constructor() {
@@ -41,13 +41,14 @@ export class PreloadScene extends Phaser.Scene {
             endFrame: TILESET_COLS * TILESET_ROWS - 1,
         });
 
-        // Background tileset (24×24 tiles, 8 cols × 3 rows)
-        this.load.spritesheet('bg_tilemap_packed', 'assets/backgrounds/tilemap-backgrounds_packed.png', {
-            frameWidth: BG_TILE_SIZE,
-            frameHeight: BG_TILE_SIZE,
+        this.load.spritesheet('tilemap_packed_fall', 'assets/tilesets/tilemap_packed_fall.png', {
+            frameWidth: TILE_SIZE,
+            frameHeight: TILE_SIZE,
             startFrame: 0,
-            endFrame: BG_TILESET_COLS * BG_TILESET_ROWS - 1,
+            endFrame: FALL_TILESET_COLS * FALL_TILESET_ROWS - 1,
         });
+
+
 
         // Load custom full-screen background image
         this.load.image('default_bg', 'assets/backgrounds/default_bg.png');
