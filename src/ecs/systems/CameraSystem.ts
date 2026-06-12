@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { EntityManager } from '../Entity';
-import { PlayerComponent, TransformComponent } from '../components';
+import { PlayerComponent, TransformComponent, RenderComponent, PhysicsBodyComponent } from '../components';
 import { GAME_WIDTH, GAME_HEIGHT, CAMERA } from '../../constants';
 
 export class CameraSystem {
@@ -40,6 +40,19 @@ export class CameraSystem {
             const player = entity.getComponent<PlayerComponent>('Player')!;
             const transform = entity.getComponent<TransformComponent>('Transform')!;
             
+            // Check if player is active/visible
+            const render = entity.getComponent<RenderComponent>('Render');
+            const sprite = render?.gameObject as Phaser.GameObjects.Sprite;
+            if (sprite && !sprite.visible) {
+                continue;
+            }
+
+            const physBody = entity.getComponent<PhysicsBodyComponent>('PhysicsBody');
+            const body = physBody?.body;
+            if (body && !body.enable) {
+                continue;
+            }
+            
             if (player.playerIndex === 0) {
                 p1 = transform;
             } else if (player.playerIndex === 1) {
@@ -47,13 +60,28 @@ export class CameraSystem {
             }
         }
 
-        if (!p1 || !p2) {
+        if (!p1 && !p2) {
             return;
         }
 
-        // 1. Calculate midpoint between players
-        const midX = (p1.x + p2.x) / 2;
-        const midY = (p1.y + p2.y) / 2;
+        // 1. Calculate midpoint and bounding box based on active players
+        let midX: number;
+        let midY: number;
+        let requiredWidth: number;
+        let requiredHeight: number;
+
+        if (p1 && p2) {
+            midX = (p1.x + p2.x) / 2;
+            midY = (p1.y + p2.y) / 2;
+            requiredWidth = Math.abs(p1.x - p2.x) + CAMERA.playerPaddingX * 2;
+            requiredHeight = Math.abs(p1.y - p2.y) + CAMERA.playerPaddingY * 2;
+        } else {
+            const activePlayer = p1 || p2!;
+            midX = activePlayer.x;
+            midY = activePlayer.y;
+            requiredWidth = CAMERA.playerPaddingX * 2;
+            requiredHeight = CAMERA.playerPaddingY * 2;
+        }
 
         if (!this.isInitialized) {
             this.focusX = midX;
@@ -61,20 +89,8 @@ export class CameraSystem {
             this.isInitialized = true;
         }
 
-        // 2. Calculate bounding box needed to show both players
-        const requiredWidth = Math.abs(p1.x - p2.x) + CAMERA.playerPaddingX * 2;
-        const requiredHeight = Math.abs(p1.y - p2.y) + CAMERA.playerPaddingY * 2;
-
-        // 3. Find the most zoomed-in discrete level that fits both players
-        this.targetZoom = CAMERA.zoomLevels[CAMERA.zoomLevels.length - 1]; // start with most zoomed out
-        for (const zoom of CAMERA.zoomLevels) {
-            const viewWidth = GAME_WIDTH / zoom;
-            const viewHeight = GAME_HEIGHT / zoom;
-            if (viewWidth >= requiredWidth && viewHeight >= requiredHeight) {
-                this.targetZoom = zoom;
-                break;
-            }
-        }
+        // 3. Keep target zoom locked to default zoom (never zoom out)
+        this.targetZoom = CAMERA.zoomLevels[CAMERA.defaultZoomIndex];
 
         // 4. Lerp current zoom and focus position toward targets in a frame-rate independent way
         // Reference delta of 16.666ms (60 FPS)
