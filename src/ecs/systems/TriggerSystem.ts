@@ -4,6 +4,7 @@ import { InputManager, Action } from '../../input/InputManager';
 
 export class TriggerSystem {
     private channelStates: Map<string, boolean> = new Map();
+    private lastPressingPlayers: Map<string, number[]> = new Map();
 
     update(entityManager: EntityManager, delta: number, inputManager: InputManager): void {
         const triggers = entityManager.query('Transform', 'Trigger');
@@ -23,6 +24,7 @@ export class TriggerSystem {
             };
 
             const prevActive = trigger.isActive;
+            let overlappingPlayers: number[] = [];
 
             if (trigger.visualType === 'button') {
                 // Button: active ONLY when a player or a cat is overlapping
@@ -48,7 +50,9 @@ export class TriggerSystem {
                         entBox.y + entBox.h > triggerBox.y
                     ) {
                         isPressed = true;
-                        break;
+                        if (physEnt.hasComponent('Player')) {
+                            overlappingPlayers.push(physEnt.getComponent<PlayerComponent>('Player')!.playerIndex);
+                        }
                     }
                 }
                 trigger.isActive = isPressed;
@@ -73,7 +77,9 @@ export class TriggerSystem {
                         entBox.y + entBox.h > triggerBox.y
                     ) {
                         isPressed = true;
-                        break;
+                        if (physEnt.hasComponent('Player')) {
+                            overlappingPlayers.push(physEnt.getComponent<PlayerComponent>('Player')!.playerIndex);
+                        }
                     }
                 }
                 trigger.isActive = isPressed;
@@ -101,6 +107,7 @@ export class TriggerSystem {
                         if (inputManager.isJustDown(player.playerIndex, Action.INTERACT)) {
                             console.log(`[TRIGGER SYSTEM DIAGNOSTIC] Interact pressed inside overlap. Player: [${entBox.x}, ${entBox.y}, ${entBox.w}, ${entBox.h}], Trigger: [${triggerBox.x}, ${triggerBox.y}, ${triggerBox.w}, ${triggerBox.h}]`);
                             trigger.isActive = !trigger.isActive;
+                            inputManager.vibrate(player.playerIndex, 'weak', 100);
                             
                             if (sprite && sprite.scene) {
                                 sprite.scene.sound.play('sfx_pickup', { volume: 0.3 } as any);
@@ -113,6 +120,23 @@ export class TriggerSystem {
                         }
                     }
                 }
+            }
+
+            // Vibrate if button/pressure state changed
+            if (trigger.visualType === 'button' || trigger.triggerType === 'pressure') {
+                if (trigger.isActive !== prevActive) {
+                    if (trigger.isActive) {
+                        for (const pi of overlappingPlayers) {
+                            inputManager.vibrate(pi, 'weak', 100);
+                        }
+                    } else {
+                        const prevOverlapping = this.lastPressingPlayers.get(triggerEnt.id) || [];
+                        for (const pi of prevOverlapping) {
+                            inputManager.vibrate(pi, 'weak', 100);
+                        }
+                    }
+                }
+                this.lastPressingPlayers.set(triggerEnt.id, overlappingPlayers);
             }
 
             // Sync visual representation of trigger

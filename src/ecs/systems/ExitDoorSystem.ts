@@ -92,6 +92,7 @@ export class ExitDoorSystem {
             // Activate when both present and P1 presses interact
             if (bothPresent && inputManager.isJustDown(0, Action.INTERACT)) {
                 this.transitioning = true;
+                inputManager.vibrate(0, 'weak', 100);
 
                 if (sprite?.scene) {
                     sprite.scene.sound.play('sfx_door_open', { volume: 0.4 });

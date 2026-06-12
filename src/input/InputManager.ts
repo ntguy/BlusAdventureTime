@@ -183,5 +183,43 @@ export class InputManager {
 
         return isKeyboardJustUp || isGamepadJustUp;
     }
+
+    /**
+     * Vibrate the controller for a given player index.
+     * @param playerIndex 0 = Human, 1 = Dog
+     * @param intensity 'weak' | 'medium' | 'strong'
+     * @param durationMs duration in milliseconds
+     */
+    vibrate(playerIndex: number, intensity: 'weak' | 'medium' | 'strong', durationMs: number): void {
+        if (!this.scene.input.gamepad) return;
+        const gamepad = this.scene.input.gamepad.getPad(playerIndex);
+        if (!gamepad) return;
+
+        const pad = gamepad.pad;
+        if (pad && pad.vibrationActuator && typeof pad.vibrationActuator.playEffect === 'function') {
+            let weakMagnitude = 0;
+            let strongMagnitude = 0;
+
+            if (intensity === 'weak') {
+                weakMagnitude = 0.25;
+                strongMagnitude = 0.0;
+            } else if (intensity === 'medium') {
+                weakMagnitude = 0.5;
+                strongMagnitude = 0.3;
+            } else if (intensity === 'strong') {
+                weakMagnitude = 0.8;
+                strongMagnitude = 0.8;
+            }
+
+            pad.vibrationActuator.playEffect('dual-rumble', {
+                startDelay: 0,
+                duration: durationMs,
+                weakMagnitude: weakMagnitude,
+                strongMagnitude: strongMagnitude
+            }).catch(() => {
+                // Ignore actuator playEffect errors
+            });
+        }
+    }
 }
 

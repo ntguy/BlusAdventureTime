@@ -131,8 +131,10 @@ export class KeySystem {
                 // Check pickup
                 if (dogOverlapping && dogPlayer && dogBody && dogSprite && inputManager.isJustDown(dogPlayer.playerIndex, Action.BARK)) {
                     this.pickupKey(keyComp, keySprite, keyPhysBody, dogSprite, dogBody, 'dog');
+                    inputManager.vibrate(dogPlayer.playerIndex, 'weak', 100);
                 } else if (humanOverlapping && humanPlayer && humanBody && humanSprite && inputManager.isJustDown(humanPlayer.playerIndex, Action.INTERACT)) {
                     this.pickupKey(keyComp, keySprite, keyPhysBody, humanSprite, humanBody, 'human');
+                    inputManager.vibrate(humanPlayer.playerIndex, 'weak', 100);
                 }
             } else {
                 keySprite.clearTint();

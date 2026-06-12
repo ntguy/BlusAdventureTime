@@ -6,6 +6,8 @@ import { PHYSICS } from '../../constants';
 const DEATH_FADE_MS = 250;
 
 export class MovementSystem {
+    private climbRumbleTimer = [0, 0];
+
     update(entityManager: EntityManager, delta: number, inputManager: InputManager): void {
         const playerEntities = entityManager.query('Player', 'PhysicsBody');
 
@@ -91,6 +93,7 @@ export class MovementSystem {
                 }
 
                 // Vertical climbing controls with top-clamp
+                let isMovingOnLadder = false;
                 if (inputManager.isDown(pi, Action.MOVE_UP)) {
                     // Allow climbing until the player is halfway above the final ladder piece
                     // Midpoint of topmost ladder tile is currentLadderTopY + 9, so body.y clamp is currentLadderTopY - 16
@@ -100,11 +103,23 @@ export class MovementSystem {
                         body.y = clampY;
                     } else {
                         body.setVelocityY(-config.moveSpeed * 0.7);
+                        isMovingOnLadder = true;
                     }
                 } else if (inputManager.isDown(pi, Action.MOVE_DOWN)) {
                     body.setVelocityY(config.moveSpeed * 0.7);
+                    isMovingOnLadder = true;
                 } else {
                     body.setVelocityY(0);
+                }
+
+                if (isMovingOnLadder) {
+                    this.climbRumbleTimer[pi] -= delta;
+                    if (this.climbRumbleTimer[pi] <= 0) {
+                        inputManager.vibrate(pi, 'weak', 150);
+                        this.climbRumbleTimer[pi] = 100; // ms cooldown
+                    }
+                } else {
+                    this.climbRumbleTimer[pi] = 0;
                 }
 
                 // Jump off ladder
@@ -112,6 +127,7 @@ export class MovementSystem {
                     player.isClimbing = false;
                     body.allowGravity = true;
                     body.setVelocityY(config.jumpVelocity);
+                    inputManager.vibrate(pi, 'weak', 100);
                 }
 
                 // Exit climbing at the bottom of the ladder
@@ -134,6 +150,7 @@ export class MovementSystem {
                 // Standard jump controls
                 if (inputManager.isJustDown(pi, Action.JUMP) && physics.isGrounded) {
                     body.setVelocityY(config.jumpVelocity);
+                    inputManager.vibrate(pi, 'weak', 100);
                 }
 
                 // Variable jump height: cut upward velocity if the jump button is released early
@@ -171,6 +188,7 @@ export class MovementSystem {
                         const scene = sprite.scene;
                         const barkIndex = Phaser.Math.Between(1, 7);
                         scene.sound.play(`sfx_bark_${barkIndex}`, { volume: 0.4 });
+                        inputManager.vibrate(pi, 'medium', 150);
 
                         sprite.play('blu_bark', true);
                         player.isBarking = true;
@@ -338,6 +356,12 @@ export class MovementSystem {
             // No scene — instant respawn fallback
             this.doRespawn(player, body);
             return;
+        }
+
+        // Trigger strong and short rumble for player death
+        const inputManager = (scene as any).inputManager;
+        if (inputManager && typeof inputManager.vibrate === 'function') {
+            inputManager.vibrate(player.playerIndex, 'strong', 300);
         }
 
         // Play death SFX

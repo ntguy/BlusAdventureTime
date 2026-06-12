@@ -49,6 +49,10 @@ export class LevelSelectScene extends Phaser.Scene {
     private player1WasAirborne = false;
     private player2WasAirborne = false;
 
+    // Background properties
+    private backgroundSprites?: Phaser.GameObjects.TileSprite[];
+    private backgroundOffsetY: number = 0;
+
     constructor() {
         super({ key: 'LevelSelectScene' });
     }
@@ -65,11 +69,13 @@ export class LevelSelectScene extends Phaser.Scene {
             return;
         }
 
-        const { levelWidthPx, levelHeightPx, player1Entity, player2Entity } = LevelLoader.loadLevel(
+        const { levelWidthPx, levelHeightPx, player1Entity, player2Entity, backgroundSprites } = LevelLoader.loadLevel(
             this,
             levelData,
             this.entityManager,
         );
+        this.backgroundSprites = backgroundSprites;
+        this.backgroundOffsetY = levelData?.meta?.backgroundOffsetY || 0;
         this.player1Entity = player1Entity;
         this.player2Entity = player2Entity;
 
@@ -172,8 +178,8 @@ export class LevelSelectScene extends Phaser.Scene {
         // Run ECS Systems in sequential order
         this.keySystem.update(this.entityManager, delta, this.inputManager);
         this.movementSystem.update(this.entityManager, delta, this.inputManager);
-        this.launcherSystem.update(this.entityManager, delta);
-        this.checkpointSystem.update(this.entityManager, delta);
+        this.launcherSystem.update(this.entityManager, delta, this.inputManager);
+        this.checkpointSystem.update(this.entityManager, delta, this.inputManager);
         this.triggerSystem.update(this.entityManager, delta, this.inputManager);
         this.catSystem.update(this.entityManager, delta, this.inputManager);
         this.signSystem.update(this.entityManager, delta);
@@ -190,6 +196,43 @@ export class LevelSelectScene extends Phaser.Scene {
 
         // Camera
         this.cameraSystem.update(this.entityManager, delta);
+
+        // Update background positions dynamically based on current zoom and scrollX/Y to ensure perfect pixel alignment
+        if (this.backgroundSprites) {
+            const camera = this.cameras.main;
+            const levelHeightPx = this.physics.world.bounds.height;
+            const zoom = camera.zoom;
+            const scrollX = camera.scrollX;
+            const scrollY = camera.scrollY;
+            const vh = camera.height / zoom;
+            const maxScrollY = Math.max(0, levelHeightPx - vh);
+            const isFiveLayer = this.backgroundSprites.length === 5;
+            const xScrollFactors = isFiveLayer
+                ? [0.02, 0.1, 0.3, 0.6, 0.8]
+                : [0.05, 0.2, 0.5, 0.8];
+            const yScrollFactors = isFiveLayer
+                ? [0.02, 0.06, 0.1, 0.15, 0.2]
+                : [0.05, 0.1, 0.15, 0.2];
+            const halfWidth = camera.width / 2;
+            const halfHeight = camera.height / 2;
+
+            this.backgroundSprites.forEach((sprite, index) => {
+                const scrollFactorX = xScrollFactors[index] || 0;
+                const scrollFactorY = yScrollFactors[index] || 0;
+
+                // Adjust tile scale to be constant in screen-space (1.0X screen scale)
+                sprite.tileScaleX = 1.0 / zoom;
+                sprite.tileScaleY = 1.0 / zoom;
+
+                // Set dynamic height matching the texture scale to prevent vertical repeating
+                sprite.height = 324 * sprite.tileScaleY;
+                const bgHeight = sprite.height;
+
+                // Position the background smoothly without snapping to avoid jagged scrolling
+                sprite.x = halfWidth - scrollX * scrollFactorX;
+                sprite.y = halfHeight / zoom + halfHeight - TILE_SIZE - bgHeight / 2 + (maxScrollY - scrollY) * scrollFactorY - this.backgroundOffsetY;
+            });
+        }
     }
 
     private handleJumpSfx(): void {
@@ -213,9 +256,11 @@ export class LevelSelectScene extends Phaser.Scene {
 
         if (p1Grounded && this.player1WasAirborne) {
             this.sound.play('sfx_land', { volume: 0.15 });
+            this.inputManager.vibrate(0, 'weak', 100);
         }
         if (p2Grounded && this.player2WasAirborne) {
             this.sound.play('sfx_land', { volume: 0.15 });
+            this.inputManager.vibrate(1, 'weak', 100);
         }
 
         this.player1WasAirborne = !p1Grounded;

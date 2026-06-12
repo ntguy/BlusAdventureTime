@@ -116,6 +116,7 @@ export class LevelDoorSystem {
             // Check for interact press
             if (overlapping && inputManager.isJustDown(0, Action.INTERACT)) {
                 this.transitioning = true;
+                inputManager.vibrate(0, 'weak', 100);
 
                 if (sprite?.scene) {
                     sprite.scene.sound.play('sfx_checkpoint', { volume: 0.4 });

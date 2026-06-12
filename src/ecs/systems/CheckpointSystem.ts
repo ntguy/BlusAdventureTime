@@ -1,5 +1,6 @@
 import { EntityManager } from '../Entity';
 import { CheckpointComponent, PhysicsBodyComponent, TransformComponent, PlayerComponent, RenderComponent } from '../components';
+import { InputManager } from '../../input/InputManager';
 import Phaser from 'phaser';
 
 const HUMAN_ICON = [
@@ -25,7 +26,7 @@ const PAW_ICON = [
 ];
 
 export class CheckpointSystem {
-    update(entityManager: EntityManager, delta: number): void {
+    update(entityManager: EntityManager, delta: number, inputManager: InputManager): void {
         const checkpoints = entityManager.query('Transform', 'Checkpoint', 'Render');
         const players = entityManager.query('Player', 'PhysicsBody');
 
@@ -96,6 +97,8 @@ export class CheckpointSystem {
                             if (sprite && sprite.scene) {
                                 sprite.scene.sound.play('sfx_checkpoint', { volume: 0.4 });
                             }
+                            inputManager.vibrate(0, 'medium', 200);
+                            inputManager.vibrate(1, 'medium', 200);
                         }
                     } else {
                         if (player.playerType === 'human') {
@@ -109,6 +112,7 @@ export class CheckpointSystem {
                                 if (sprite && sprite.scene) {
                                     sprite.scene.sound.play('sfx_checkpoint', { volume: 0.4 });
                                 }
+                                inputManager.vibrate(player.playerIndex, 'medium', 200);
                             }
                         } else if (player.playerType === 'dog') {
                             if (!checkpoint.dogActive) {
@@ -121,6 +125,7 @@ export class CheckpointSystem {
                                 if (sprite && sprite.scene) {
                                     sprite.scene.sound.play('sfx_checkpoint', { volume: 0.4 });
                                 }
+                                inputManager.vibrate(player.playerIndex, 'medium', 200);
                             }
                         }
                     }

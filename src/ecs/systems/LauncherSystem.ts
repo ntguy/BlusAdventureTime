@@ -1,8 +1,9 @@
 import { EntityManager } from '../Entity';
-import { LauncherComponent, TransformComponent, RenderComponent, PhysicsBodyComponent } from '../components';
+import { LauncherComponent, TransformComponent, RenderComponent, PhysicsBodyComponent, PlayerComponent } from '../components';
+import { InputManager } from '../../input/InputManager';
 
 export class LauncherSystem {
-    update(entityManager: EntityManager, delta: number): void {
+    update(entityManager: EntityManager, delta: number, inputManager: InputManager): void {
         const launchers = entityManager.query('Transform', 'Launcher', 'Render');
         const physicsEntities = entityManager.query('PhysicsBody', 'Transform');
 
@@ -66,6 +67,10 @@ export class LauncherSystem {
                         }
                         if (sprite && sprite.scene) {
                             sprite.scene.sound.play('sfx_jump', { volume: 0.3 } as any);
+                        }
+                        if (physEnt.hasComponent('Player')) {
+                            const player = physEnt.getComponent<PlayerComponent>('Player')!;
+                            inputManager.vibrate(player.playerIndex, 'medium', 150);
                         }
                     }
                 }

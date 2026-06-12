@@ -151,8 +151,8 @@ export class GameScene extends Phaser.Scene {
         // Run ECS Systems in sequential order
         this.keySystem.update(this.entityManager, delta, this.inputManager);
         this.movementSystem.update(this.entityManager, delta, this.inputManager);
-        this.launcherSystem.update(this.entityManager, delta);
-        this.checkpointSystem.update(this.entityManager, delta);
+        this.launcherSystem.update(this.entityManager, delta, this.inputManager);
+        this.checkpointSystem.update(this.entityManager, delta, this.inputManager);
         this.triggerSystem.update(this.entityManager, delta, this.inputManager);
         this.catSystem.update(this.entityManager, delta, this.inputManager);
         this.signSystem.update(this.entityManager, delta);
@@ -252,9 +252,11 @@ export class GameScene extends Phaser.Scene {
 
         if (p1Grounded && this.player1WasAirborne) {
             this.audioManager.playLand();
+            this.inputManager.vibrate(0, 'weak', 100);
         }
         if (p2Grounded && this.player2WasAirborne) {
             this.audioManager.playLand();
+            this.inputManager.vibrate(1, 'weak', 100);
         }
 
         this.player1WasAirborne = !p1Grounded;
