@@ -170,3 +170,13 @@ export interface MovingPlatformComponent extends Component {
     requireAll?: boolean;
     overlaySprite?: Phaser.GameObjects.Sprite;
 }
+
+export interface LevelDoorComponent extends Component {
+    type: 'LevelDoor';
+    doorId: number;         // matches doorId in levelSelectMapping
+    levelKey: string;       // Phaser cache key for the level JSON
+    label: string;          // display text above the door, e.g. "LEVEL 1"
+    labelText?: Phaser.GameObjects.Text;   // cached label text object
+    promptText?: Phaser.GameObjects.Text;  // "E" prompt shown when player is near
+    isPlayerNear: boolean;  // true when player overlaps the door
+}

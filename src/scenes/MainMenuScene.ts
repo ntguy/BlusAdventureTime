@@ -4,9 +4,8 @@ import { GAME_WIDTH, GAME_HEIGHT, BG_TILE_SIZE } from '../constants';
 export class MainMenuScene extends Phaser.Scene {
     private selectedIndex: number = 0;
     private menuOptions = [
-        { label: 'PLAY GAME', scene: 'GameScene', data: { levelKey: 'test_level' } },
         { label: 'LEVEL SELECT', scene: 'LevelSelectScene' },
-        { label: 'LEVEL EDITOR', scene: 'EditorScene' } // Stubbed until editor exists
+        { label: 'LEVEL EDITOR', scene: 'EditorScene' }
     ];
 
     private optionTextObjects: Phaser.GameObjects.Text[] = [];
@@ -88,7 +87,7 @@ export class MainMenuScene extends Phaser.Scene {
 
         this.cameras.main.fadeOut(300, 10, 10, 26);
         this.cameras.main.once('camerafadeoutcomplete', () => {
-            this.scene.start(option.scene, option.data);
+            this.scene.start(option.scene);
         });
     }
 

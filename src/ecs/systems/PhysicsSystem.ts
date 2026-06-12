@@ -11,6 +11,12 @@ export class PhysicsSystem {
             const body = physics.body;
             const gameObject = body.gameObject as any;
 
+            // Reset side collisions to true by default (in case they were disabled by player-crate top-standing logic)
+            if (body.checkCollision) {
+                body.checkCollision.left = true;
+                body.checkCollision.right = true;
+            }
+
             // Sync visual transform back from the Phaser Game Object which has been updated by the Arcade physics engine
             if (gameObject) {
                 transform.x = gameObject.x;

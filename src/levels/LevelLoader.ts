@@ -19,8 +19,10 @@ import {
     FlyingComponent,
     SpikesComponent,
     KeyComponent,
-    MovingPlatformComponent
+    MovingPlatformComponent,
+    LevelDoorComponent
 } from '../ecs/components';
+import { getMappingByDoorId } from './levelSelectMapping';
 
 export class LevelLoader {
     /**
@@ -487,9 +489,13 @@ export class LevelLoader {
                 } as SpikesComponent);
 
             } else if (entData.type === 'exitDoor') {
-                const visual = getVisual(110);
+                const visual = getVisual(150);
                 const sprite = scene.add.sprite(entX, entY, visual.texture, visual.frame);
                 sprite.setDepth(5);
+
+                if (entData.y - 1 >= 0) {
+                    bgLayer.putTileAt(110, entData.x, entData.y - 1);
+                }
 
                 const entity = entityManager.createEntity();
                 entity.addComponent({ type: 'Transform', x: sprite.x, y: sprite.y, width: 18, height: 18 } as TransformComponent);
@@ -501,6 +507,36 @@ export class LevelLoader {
                     activeFrame: visual.activeFrame
                 } as RenderComponent);
                 entity.addComponent({ type: 'ExitDoor', playersPresent: new Set() } as ExitDoorComponent);
+
+            } else if (entData.type === 'levelDoor') {
+                const props = entData.properties || {};
+                const doorId = Number(props.doorId || 0);
+                const mapping = getMappingByDoorId(doorId);
+
+                const visual = getVisual(150);
+                const sprite = scene.add.sprite(entX, entY, visual.texture, visual.frame);
+                sprite.setDepth(5);
+
+                if (entData.y - 1 >= 0) {
+                    bgLayer.putTileAt(110, entData.x, entData.y - 1);
+                }
+
+                const entity = entityManager.createEntity();
+                entity.addComponent({ type: 'Transform', x: sprite.x, y: sprite.y, width: 18, height: 18 } as TransformComponent);
+                entity.addComponent({
+                    type: 'Render',
+                    gameObject: sprite,
+                    depth: 5,
+                    idleFrame: visual.frame,
+                    activeFrame: visual.activeFrame
+                } as RenderComponent);
+                entity.addComponent({
+                    type: 'LevelDoor',
+                    doorId,
+                    levelKey: mapping?.levelKey || '',
+                    label: props.label !== undefined ? String(props.label) : (mapping?.label || 'LEVEL ?'),
+                    isPlayerNear: false
+                } as LevelDoorComponent);
 
             } else if (entData.type === 'ladder') {
                 const visual = getVisual(71);
@@ -795,15 +831,44 @@ export class LevelLoader {
         scene.physics.add.collider(p2Render.gameObject, terrainLayer);
         scene.physics.add.collider(cratesGroup, terrainLayer);
 
-        scene.physics.add.collider(p1Render.gameObject, cratesGroup);
+        scene.physics.add.collider(
+            p1Render.gameObject,
+            cratesGroup,
+            undefined,
+            (playerObj: any, crateObj: any) => {
+                const playerBody = playerObj.body as Phaser.Physics.Arcade.Body;
+                const crateBody = crateObj.body as Phaser.Physics.Arcade.Body;
+                // If player is standing on top of the crate (with 2px vertical threshold),
+                // disable side collisions so they don't push it while walking near the edge.
+                if (playerBody.bottom <= crateBody.y + 2) {
+                    crateBody.checkCollision.left = false;
+                    crateBody.checkCollision.right = false;
+                } else {
+                    crateBody.checkCollision.left = true;
+                    crateBody.checkCollision.right = true;
+                }
+                return true;
+            }
+        );
 
         // Dog has less pushing force on crates — cap the velocity imparted to the crate
         scene.physics.add.collider(
             p2Render.gameObject,
             cratesGroup,
             undefined,
-            (_dogObj: any, crateObj: any) => {
+            (dogObj: any, crateObj: any) => {
+                const dogBody = dogObj.body as Phaser.Physics.Arcade.Body;
                 const crateBody = (crateObj as Phaser.GameObjects.GameObject & { body: Phaser.Physics.Arcade.Body }).body;
+                
+                // Prevent dog pushing crate while standing on top
+                if (dogBody.bottom <= crateBody.y + 2) {
+                    crateBody.checkCollision.left = false;
+                    crateBody.checkCollision.right = false;
+                } else {
+                    crateBody.checkCollision.left = true;
+                    crateBody.checkCollision.right = true;
+                }
+
                 // Limit max crate speed when pushed by dog to 35% of normal
                 const DOG_PUSH_LIMIT = 40;
                 crateBody.setMaxVelocityX(DOG_PUSH_LIMIT);
@@ -903,7 +968,7 @@ export class LevelLoader {
                             for (const otherEnt of levelData.entities) {
                                 if (otherEnt === entData) continue;
                                 
-                                const staticTypes = ['button', 'lever', 'launcher', 'sign', 'spikes', 'exitDoor', 'checkpoint'];
+                                const staticTypes = ['button', 'lever', 'launcher', 'sign', 'spikes', 'exitDoor', 'checkpoint', 'levelDoor'];
                                 if (staticTypes.includes(otherEnt.type)) {
                                     const expectedTileBelow = `${otherEnt.x},${otherEnt.y + 1}`;
                                     if (platformTiles.has(expectedTileBelow)) {

@@ -21,6 +21,7 @@ import { SpikesSystem } from '../ecs/systems/SpikesSystem';
 import { FlyingSystem } from '../ecs/systems/FlyingSystem';
 import { KeySystem } from '../ecs/systems/KeySystem';
 import { MovingPlatformSystem } from '../ecs/systems/MovingPlatformSystem';
+import { ExitDoorSystem } from '../ecs/systems/ExitDoorSystem';
 
 export class GameScene extends Phaser.Scene {
     private entityManager!: EntityManager;
@@ -43,6 +44,7 @@ export class GameScene extends Phaser.Scene {
     private flyingSystem!: FlyingSystem;
     private keySystem!: KeySystem;
     private movingPlatformSystem!: MovingPlatformSystem;
+    private exitDoorSystem!: ExitDoorSystem;
 
     // FPS display
     private fpsText!: Phaser.GameObjects.Text;
@@ -57,14 +59,16 @@ export class GameScene extends Phaser.Scene {
     private playtestLevelData: any = null;
     private backgroundSprites?: Phaser.GameObjects.TileSprite[];
     private backgroundOffsetY: number = 0;
+    private fromLobbyDoorId: number = 0;
 
     constructor() {
         super({ key: 'GameScene' });
     }
 
-    create(data?: { levelKey?: string; levelData?: any; isTestMode?: boolean }): void {
+    create(data?: { levelKey?: string; levelData?: any; isTestMode?: boolean; fromLobbyDoorId?: number }): void {
         this.isTestMode = data?.isTestMode || false;
         this.playtestLevelData = data?.levelData || null;
+        this.fromLobbyDoorId = data?.fromLobbyDoorId || 0;
 
         // Initialize ECS Entity Manager
         this.entityManager = new EntityManager();
@@ -108,6 +112,17 @@ export class GameScene extends Phaser.Scene {
         this.flyingSystem = new FlyingSystem(this.movementSystem);
         this.keySystem = new KeySystem();
         this.movingPlatformSystem = new MovingPlatformSystem();
+        this.exitDoorSystem = new ExitDoorSystem();
+
+        // Wire exit door to return to level select lobby
+        if (!this.isTestMode && this.fromLobbyDoorId > 0) {
+            this.exitDoorSystem.setExitCallback(() => {
+                this.cameras.main.fadeOut(300, 10, 10, 26);
+                this.cameras.main.once('camerafadeoutcomplete', () => {
+                    this.scene.start('LevelSelectScene', { spawnDoorId: this.fromLobbyDoorId });
+                });
+            });
+        }
 
         // Sync initial trigger/target states
         this.triggerSystem.syncAll(this.entityManager);
@@ -144,6 +159,7 @@ export class GameScene extends Phaser.Scene {
         this.spikesSystem.update(this.entityManager, delta);
         this.flyingSystem.update(this.entityManager, delta);
         this.movingPlatformSystem.update(this.entityManager, delta);
+        this.exitDoorSystem.update(this.entityManager, delta, this.inputManager);
         this.physicsSystem.update(this.entityManager, delta);
         this.renderSystem.update(this.entityManager, delta);
 

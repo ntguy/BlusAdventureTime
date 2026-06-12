@@ -108,7 +108,9 @@ export class PreloadScene extends Phaser.Scene {
         this.load.json('test_level', 'assets/levels/test_level.json');
         this.load.json('Lvl1-Jun8', 'assets/levels/Lvl1-Jun8.json');
         this.load.json('Lvl2-Jun9', 'assets/levels/Lvl2-Jun9.json');
-        this.load.json('Lvl1--6-4', 'assets/levels/Lvl1--6-4.json');
+        this.load.json('Lvl3-Jun9', 'assets/levels/Lvl3-Jun9.json');
+        this.load.json('Lvl4-Jun11', 'assets/levels/Lvl4-Jun11.json');
+        this.load.json('LevelSelect', 'assets/levels/LevelSelect.json');
     }
 
     create(): void {

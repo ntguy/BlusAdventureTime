@@ -1,183 +1,171 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, BG_TILE_SIZE } from '../constants';
+import { TILE_SIZE } from '../constants';
+
+// ECS Architecture & Loader
+import { EntityManager } from '../ecs/Entity';
+import { PhysicsBodyComponent, PlayerComponent } from '../ecs/components';
+import { LevelLoader } from '../levels/LevelLoader';
+import { LevelData } from '../levels/LevelSchema';
+import { InputManager } from '../input/InputManager';
+import { MovementSystem } from '../ecs/systems/MovementSystem';
+import { PhysicsSystem } from '../ecs/systems/PhysicsSystem';
+import { RenderSystem } from '../ecs/systems/RenderSystem';
+import { CameraSystem } from '../ecs/systems/CameraSystem';
+import { LevelDoorSystem } from '../ecs/systems/LevelDoorSystem';
+import { SignSystem } from '../ecs/systems/SignSystem';
+import { getMappingByDoorId } from '../levels/levelSelectMapping';
 
 export class LevelSelectScene extends Phaser.Scene {
-    private selectedIndex: number = 0;
-    private menuOptions = [
-        { label: 'LEVEL 1', locked: false, data: { levelKey: 'test_level' } },
-        { label: 'LEVEL 2', locked: true },
-        { label: 'BACK', locked: false }
-    ];
+    private entityManager!: EntityManager;
+    private inputManager!: InputManager;
 
-    private optionTextObjects: Phaser.GameObjects.Text[] = [];
-    private titleText!: Phaser.GameObjects.Text;
+    // ECS Systems (subset — lobby doesn't need triggers, launchers, etc.)
+    private movementSystem!: MovementSystem;
+    private physicsSystem!: PhysicsSystem;
+    private renderSystem!: RenderSystem;
+    private cameraSystem!: CameraSystem;
+    private levelDoorSystem!: LevelDoorSystem;
+    private signSystem!: SignSystem;
+
+    // Player 1 only
+    private player1WasAirborne = false;
 
     constructor() {
         super({ key: 'LevelSelectScene' });
     }
 
-    create(): void {
-        const width = GAME_WIDTH;
-        const height = GAME_HEIGHT;
+    create(data?: { spawnDoorId?: number }): void {
+        // 1. Initialize ECS
+        this.entityManager = new EntityManager();
 
-        // Static background tiling
-        this.createBackground();
-
-        // Dark overlay
-        const overlay = this.add.graphics();
-        overlay.fillStyle(0x0a0a1a, 0.65);
-        overlay.fillRect(0, 0, width, height);
-
-        // Title
-        this.titleText = this.add.text(width / 2, height / 2 - 100, "SELECT LEVEL", {
-            fontFamily: '"Press Start 2P"',
-            fontSize: '24px',
-            color: '#ffffff',
-            align: 'center',
-        }).setOrigin(0.5);
-
-        // Draw options
-        this.optionTextObjects = [];
-        const startY = height / 2 + 20;
-
-        this.menuOptions.forEach((option, idx) => {
-            const text = option.locked ? `${option.label} (LOCKED)` : option.label;
-            const textObj = this.add.text(width / 2, startY + idx * 40, text, {
-                fontFamily: '"Press Start 2P"',
-                fontSize: '16px',
-                color: '#ffffff',
-                align: 'center',
-            }).setOrigin(0.5);
-
-            textObj.setInteractive({ useHandCursor: true });
-            textObj.on('pointerover', () => this.selectOption(idx));
-            textObj.on('pointerdown', () => this.confirmSelection());
-
-            this.optionTextObjects.push(textObj);
-        });
-
-        this.updateMenuHighlight();
-        this.setupInput();
-
-        this.cameras.main.fadeIn(300, 10, 10, 26);
-    }
-
-    private selectOption(index: number): void {
-        if (index === this.selectedIndex) return;
-        this.selectedIndex = index;
-        this.updateMenuHighlight();
-        this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.4 } as any);
-    }
-
-    private updateMenuHighlight(): void {
-        this.optionTextObjects.forEach((textObj, idx) => {
-            const option = this.menuOptions[idx];
-            const isSelected = idx === this.selectedIndex;
-            const text = option.locked ? `${option.label} (LOCKED)` : option.label;
-            
-            if (isSelected) {
-                textObj.setText(`> ${text} <`);
-                textObj.setColor(option.locked ? '#ff5555' : '#ffff00');
-            } else {
-                textObj.setText(text);
-                textObj.setColor(option.locked ? '#444444' : '#888888');
-            }
-        });
-    }
-
-    private confirmSelection(): void {
-        const option = this.menuOptions[this.selectedIndex];
-        
-        if (option.locked) {
-            this.sound.play('sfx_hurt', { volume: 0.3 });
-            this.cameras.main.shake(100, 0.005);
+        // 2. Load the LevelSelect level JSON
+        const levelData = this.cache.json.get('LevelSelect') as LevelData;
+        if (!levelData) {
+            console.error('LevelSelect level data not found!');
+            this.scene.start('MainMenuScene');
             return;
         }
 
-        if (option.label === 'BACK') {
+        const { levelWidthPx, levelHeightPx, player1Entity, player2Entity } = LevelLoader.loadLevel(
+            this,
+            levelData,
+            this.entityManager,
+        );
+
+        // Hide the dog (player 2) — lobby is single-player
+        const p2Render = player2Entity.getComponent<any>('Render');
+        if (p2Render?.gameObject) {
+            (p2Render.gameObject as Phaser.GameObjects.Sprite).setVisible(false);
+            const p2Body = player2Entity.getComponent<PhysicsBodyComponent>('PhysicsBody');
+            if (p2Body?.body) {
+                p2Body.body.enable = false;
+            }
+        }
+
+        // 3. If returning from a level, spawn player at the corresponding door position
+        if (data?.spawnDoorId) {
+            const doorMapping = getMappingByDoorId(data.spawnDoorId);
+            if (doorMapping) {
+                // Find the door entity with matching doorId and spawn player there
+                const doors = this.entityManager.query('Transform', 'LevelDoor');
+                for (const doorEnt of doors) {
+                    const doorComp = doorEnt.getComponent<any>('LevelDoor')!;
+                    if (doorComp.doorId === data.spawnDoorId) {
+                        const transform = doorEnt.getComponent<any>('Transform')!;
+                        const p1Body = player1Entity.getComponent<PhysicsBodyComponent>('PhysicsBody');
+                        const p1Render = player1Entity.getComponent<any>('Render');
+                        if (p1Body?.body) {
+                            p1Body.body.reset(transform.x - p1Body.body.width / 2, transform.y - p1Body.body.height);
+                        }
+                        if (p1Render?.gameObject) {
+                            (p1Render.gameObject as Phaser.GameObjects.Sprite).setPosition(transform.x, transform.y - 6);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 4. Physics world bounds
+        this.physics.world.setBounds(0, 0, levelWidthPx, levelHeightPx);
+
+        // 5. Input
+        this.inputManager = new InputManager(this);
+
+        // 6. ECS Systems (minimal set for the lobby)
+        this.movementSystem = new MovementSystem();
+        this.physicsSystem = new PhysicsSystem();
+        this.renderSystem = new RenderSystem();
+        this.cameraSystem = new CameraSystem(this, levelWidthPx, levelHeightPx);
+        this.levelDoorSystem = new LevelDoorSystem();
+        this.signSystem = new SignSystem();
+
+        // 7. Wire up door activation to scene transition
+        this.levelDoorSystem.setEnterCallback((levelKey: string, doorId: number) => {
+            this.cameras.main.fadeOut(300, 10, 10, 26);
+            this.cameras.main.once('camerafadeoutcomplete', () => {
+                this.scene.start('GameScene', { levelKey, fromLobbyDoorId: doorId });
+            });
+        });
+
+        // 8. ESC to return to main menu
+        const kb = this.input.keyboard!;
+        kb.addKey(Phaser.Input.Keyboard.KeyCodes.ESC).on('down', () => {
             this.sound.play('sfx_jump', { volume: 0.2, pitch: 0.8 } as any);
             this.cameras.main.fadeOut(300, 10, 10, 26);
             this.cameras.main.once('camerafadeoutcomplete', () => {
                 this.scene.start('MainMenuScene');
             });
-        } else {
-            // Level 1: Launch game
-            this.sound.play('sfx_checkpoint', { volume: 0.4 });
-            this.cameras.main.fadeOut(300, 10, 10, 26);
-            this.cameras.main.once('camerafadeoutcomplete', () => {
-                this.scene.start('GameScene', option.data);
-            });
-        }
-    }
-
-    private setupInput(): void {
-        const kb = this.input.keyboard!;
-        
-        const goUp = () => {
-            const prevIdx = (this.selectedIndex - 1 + this.menuOptions.length) % this.menuOptions.length;
-            this.selectOption(prevIdx);
-        };
-
-        const goDown = () => {
-            const nextIdx = (this.selectedIndex + 1) % this.menuOptions.length;
-            this.selectOption(nextIdx);
-        };
-
-        kb.addKey(Phaser.Input.Keyboard.KeyCodes.W).on('down', goUp);
-        kb.addKey(Phaser.Input.Keyboard.KeyCodes.UP).on('down', goUp);
-        kb.addKey(Phaser.Input.Keyboard.KeyCodes.S).on('down', goDown);
-        kb.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN).on('down', goDown);
-
-        kb.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER).on('down', () => this.confirmSelection());
-        kb.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE).on('down', () => this.confirmSelection());
-        
-        kb.addKey(Phaser.Input.Keyboard.KeyCodes.ESC).on('down', () => {
-            this.selectOption(2); // select BACK option
-            this.confirmSelection();
         });
 
-        this.input.gamepad?.on('down', (pad: Phaser.Input.Gamepad.Gamepad, button: Phaser.Input.Gamepad.Button) => {
-            if (button.index === 12) goUp();     // D-Pad Up
-            if (button.index === 13) goDown();   // D-Pad Down
-            if (button.index === 0) this.confirmSelection(); // A Button
-            if (button.index === 1) {            // B Button (Back)
-                this.selectOption(2);
-                this.confirmSelection();
+        // Gamepad B button to go back
+        this.input.gamepad?.on('down', (_pad: Phaser.Input.Gamepad.Gamepad, button: Phaser.Input.Gamepad.Button) => {
+            if (button.index === 1) { // B Button
+                this.sound.play('sfx_jump', { volume: 0.2, pitch: 0.8 } as any);
+                this.cameras.main.fadeOut(300, 10, 10, 26);
+                this.cameras.main.once('camerafadeoutcomplete', () => {
+                    this.scene.start('MainMenuScene');
+                });
             }
         });
+
+        this.cameras.main.fadeIn(300, 10, 10, 26);
     }
 
-    private createBackground(): void {
-        const SKY_TILES = [0, 1];
-        const MID_TILES = [8, 9];
-        const GROUND_TILES = [16, 17];
+    update(time: number, delta: number): void {
+        if (!this.inputManager) return;
 
-        const cols = Math.ceil(GAME_WIDTH / BG_TILE_SIZE);
-        const rows = Math.ceil(GAME_HEIGHT / BG_TILE_SIZE);
+        this.inputManager.update();
 
-        const midRow = rows - 3;
-        const groundRow = rows - 2;
+        // Run ECS systems
+        this.movementSystem.update(this.entityManager, delta, this.inputManager);
+        this.levelDoorSystem.update(this.entityManager, delta, this.inputManager);
+        this.signSystem.update(this.entityManager, delta);
+        this.physicsSystem.update(this.entityManager, delta);
+        this.renderSystem.update(this.entityManager, delta);
 
-        const getTile = (arr: number[], index: number) => arr[((index % arr.length) + arr.length) % arr.length];
+        // Landing SFX for player 1
+        this.handleP1LandingSfx();
 
-        for (let y = 0; y < rows; y++) {
-            for (let x = 0; x < cols; x++) {
-                let tileIndex: number;
-                if (y === midRow) {
-                    tileIndex = getTile(MID_TILES, x);
-                } else if (y >= groundRow) {
-                    tileIndex = getTile(GROUND_TILES, x);
-                } else {
-                    tileIndex = getTile(SKY_TILES, x);
-                }
+        // Camera
+        this.cameraSystem.update(this.entityManager, delta);
+    }
 
-                this.add.sprite(
-                    x * BG_TILE_SIZE + BG_TILE_SIZE / 2,
-                    y * BG_TILE_SIZE + BG_TILE_SIZE / 2,
-                    'bg_tilemap_packed',
-                    tileIndex,
-                );
+    private handleP1LandingSfx(): void {
+        const players = this.entityManager.query('Player', 'PhysicsBody');
+        for (const playerEnt of players) {
+            const player = playerEnt.getComponent<PlayerComponent>('Player')!;
+            if (player.playerIndex !== 0) continue;
+
+            const body = playerEnt.getComponent<PhysicsBodyComponent>('PhysicsBody')!;
+            const grounded = body.isGrounded;
+
+            if (grounded && this.player1WasAirborne) {
+                this.sound.play('sfx_land', { volume: 0.15 });
             }
+
+            this.player1WasAirborne = !grounded;
+            break;
         }
     }
 }

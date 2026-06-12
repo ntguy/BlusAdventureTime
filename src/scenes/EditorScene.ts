@@ -90,7 +90,8 @@ export class EditorScene extends Phaser.Scene {
         { label: 'CT', type: 'cat', color: '#ff55ff', name: 'CAT' },
         { label: 'SN', type: 'sign', color: '#e2a76f', name: 'SIGN' },
         { label: 'SP', type: 'spikes', color: '#ff3333', name: 'SPIKES' },
-        { label: 'MP', type: 'movingPlatform', color: '#44aaff', name: 'MOVING PLATFORM' }
+        { label: 'MP', type: 'movingPlatform', color: '#44aaff', name: 'MOVING PLATFORM' },
+        { label: 'LDR', type: 'levelDoor', color: '#33ff99', name: 'LEVEL DOOR' }
     ];
 
     constructor() {
@@ -377,7 +378,8 @@ export class EditorScene extends Phaser.Scene {
             sign: { t: 'SN', c: '#e2a76f' },
             spikes: { t: 'SP', c: '#ff3333' },
             movingPlatform: { t: 'MP', c: '#44aaff' },
-            flying: { t: 'FL', c: '#a233ff' }
+            flying: { t: 'FL', c: '#a233ff' },
+            levelDoor: { t: 'LDR', c: '#33ff99' }
         };
 
         const config = labels[ent.type] || { t: '?', c: '#ffffff' };
@@ -1322,6 +1324,12 @@ export class EditorScene extends Phaser.Scene {
             this.selectedEntityText.setText(`Selected: ${name}\nCh: ${ch} | Offset: ${endXDisp},${endYDisp}\nVel: ${vel} | Glow: ${glow}\nCarry: ${carry}`);
             this.selectedEntityText.setColor('#44aaff');
             this.editPropsButton.setVisible(true);
+        } else if (ent.type === 'levelDoor') {
+            const doorId = props.doorId !== undefined ? props.doorId : 1;
+            const label = props.label !== undefined ? props.label : `LEVEL ${doorId}`;
+            this.selectedEntityText.setText(`Selected: ${name}\nDoor ID: ${doorId}\nLabel: "${label}"`);
+            this.selectedEntityText.setColor('#33ff99');
+            this.editPropsButton.setVisible(true);
         } else {
             this.selectedEntityText.setText(`Selected: ${name}\n(No editable properties)`);
             this.selectedEntityText.setColor('#ffffff');
@@ -1476,6 +1484,20 @@ export class EditorScene extends Phaser.Scene {
                 this.sound.play('sfx_checkpoint', { volume: 0.3 });
                 this.updateSelectedEntityUI();
                 this.createWorkspaceTilemap();
+            } else if (ent.type === 'levelDoor') {
+                const doorId = prompt("Enter Door ID (matches mapping, e.g. 1):", String(props.doorId !== undefined ? props.doorId : "1"));
+                if (doorId === null) return;
+                const label = prompt("Enter Door Display Name (e.g. LEVEL 1):", String(props.label !== undefined ? props.label : `LEVEL ${doorId}`));
+                if (label === null) return;
+
+                ent.properties = {
+                    doorId: parseInt(doorId.trim()) || 1,
+                    label: label.trim()
+                };
+
+                this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                this.updateSelectedEntityUI();
+                this.createWorkspaceTilemap();
             }
         } else {
             // UNIFIED FORM SYSTEM FOR REAL PLAYERS
@@ -1594,6 +1616,20 @@ export class EditorScene extends Phaser.Scene {
                     const facingVal = values.facing.trim().toLowerCase();
                     ent.properties = {
                         facing: facingVal === 'left' ? 'left' : 'right'
+                    };
+                    this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                    this.updateSelectedEntityUI();
+                    this.createWorkspaceTilemap();
+                });
+            } else if (ent.type === 'levelDoor') {
+                this.showPropertyForm("Level Door Properties", [
+                    { key: 'doorId', label: 'Door ID (matches mapping)', type: 'text', value: String(props.doorId !== undefined ? props.doorId : "1") },
+                    { key: 'label', label: 'Door Display Name', type: 'text', value: String(props.label !== undefined ? props.label : "LEVEL 1") }
+                ], (values) => {
+                    const parsedDoorId = parseInt(values.doorId.trim());
+                    ent.properties = {
+                        doorId: isNaN(parsedDoorId) ? 1 : parsedDoorId,
+                        label: values.label.trim()
                     };
                     this.sound.play('sfx_checkpoint', { volume: 0.3 });
                     this.updateSelectedEntityUI();
@@ -2145,7 +2181,7 @@ export class EditorScene extends Phaser.Scene {
                     const labels: Record<string, string> = {
                         humanSpawn: 'H', dogSpawn: 'D', hd: 'HD', exitDoor: 'DR', crate: 'CR', key: 'KY',
                         checkpoint: 'CP', ladder: 'LD', button: 'BT', gate: 'GT', launcher: 'LN',
-                        cat: 'CT', sign: 'SN', spikes: 'SP', movingPlatform: 'MP', flying: 'FL'
+                        cat: 'CT', sign: 'SN', spikes: 'SP', movingPlatform: 'MP', flying: 'FL', levelDoor: 'LDR'
                     };
                     const label = labels[item.value.type] || '?';
                     const txt = this.add.text(itemWorldX, itemWorldY, label, {
@@ -2199,7 +2235,7 @@ export class EditorScene extends Phaser.Scene {
                 const labels: Record<string, string> = {
                     humanSpawn: 'H', dogSpawn: 'D', hd: 'HD', exitDoor: 'DR', crate: 'CR', key: 'KY',
                     checkpoint: 'CP', ladder: 'LD', button: 'BT', gate: 'GT', launcher: 'LN',
-                    cat: 'CT', sign: 'SN', spikes: 'SP', movingPlatform: 'MP', flying: 'FL'
+                    cat: 'CT', sign: 'SN', spikes: 'SP', movingPlatform: 'MP', flying: 'FL', levelDoor: 'LDR'
                 };
                 const label = labels[entity.type] || '?';
                 this.dragPreviewText = this.add.text(worldPoint.x, worldPoint.y, label, {
