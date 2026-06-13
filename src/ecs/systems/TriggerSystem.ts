@@ -32,8 +32,8 @@ export class TriggerSystem {
                 for (const physEnt of physicsEntities) {
                     if (physEnt.id === triggerEnt.id) continue;
 
-                    const isPlayerOrCat = physEnt.hasComponent('Player') || physEnt.hasComponent('Cat');
-                    if (!isPlayerOrCat) continue;
+                    const isPlayerOrCatOrCrate = physEnt.hasComponent('Player') || physEnt.hasComponent('Cat') || physEnt.hasComponent('Carryable');
+                    if (!isPlayerOrCatOrCrate) continue;
 
                     const body = physEnt.getComponent<PhysicsBodyComponent>('PhysicsBody')!.body;
                     const entBox = {

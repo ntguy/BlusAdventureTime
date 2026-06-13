@@ -13,10 +13,12 @@ export interface LevelDoorMapping {
 }
 
 export const LEVEL_SELECT_MAPPINGS: LevelDoorMapping[] = [
-    { doorId: 1, levelKey: 'Lvl1-Jun8',  label: 'LEVEL 1' },
-    { doorId: 2, levelKey: 'Lvl2-Jun9',  label: 'LEVEL 2' },
-    { doorId: 3, levelKey: 'Lvl3-Jun9',  label: 'LEVEL 3' },
-    { doorId: 4, levelKey: 'Lvl4-Jun11', label: 'LEVEL 4' },
+    { doorId: 1, levelKey: 'Lvl1',  label: 'LEVEL 1' },
+    { doorId: 2, levelKey: 'Lvl2',  label: 'LEVEL 2' },
+    { doorId: 3, levelKey: 'Lvl3',  label: 'LEVEL 3' },
+    { doorId: 4, levelKey: 'Lvl4', label: 'LEVEL 4' },
+    { doorId: 5, levelKey: 'Lvl5', label: 'LEVEL 5' },
+    { doorId: 6, levelKey: 'Lvl6', label: 'LEVEL 6' },
 ];
 
 /** Look up the mapping for a given doorId */

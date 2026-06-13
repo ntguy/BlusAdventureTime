@@ -118,6 +118,9 @@ export class MovingPlatformSystem {
                 // Ignore if this physics entity is already explicitly carried by this platform
                 if (plat.carriedEntities && plat.carriedEntities.includes(physEnt)) continue;
 
+                // Ignore flying entities
+                if (physEnt.hasComponent('Flying')) continue;
+
                 // Ignore players that are dying
                 const pComp = physEnt.getComponent<PlayerComponent>('Player');
                 if (pComp && pComp.isDying) continue;

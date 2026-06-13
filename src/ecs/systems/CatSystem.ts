@@ -105,8 +105,28 @@ export class CatSystem {
                                 const leftTile = terrainLayer ? terrainLayer.getTileAt(catTileX - 1, catTileY) : null;
                                 const rightTile = terrainLayer ? terrainLayer.getTileAt(catTileX + 1, catTileY) : null;
                                 
-                                const isBlockedLeft = (leftTile && leftTile.index !== -1) || catBody.blocked.left;
-                                const isBlockedRight = (rightTile && rightTile.index !== -1) || catBody.blocked.right;
+                                let isBlockedLeft = (leftTile && leftTile.index !== -1) || catBody.blocked.left;
+                                let isBlockedRight = (rightTile && rightTile.index !== -1) || catBody.blocked.right;
+
+                                // Also check for physics bodies (crates, gates, platforms, etc.)
+                                const leftCheckRect = new Phaser.Geom.Rectangle(catBody.x - 2, catBody.y + 2, 2, catBody.height - 4);
+                                const rightCheckRect = new Phaser.Geom.Rectangle(catBody.x + catBody.width, catBody.y + 2, 2, catBody.height - 4);
+
+                                const dogBody = dogEntity?.getComponent<PhysicsBodyComponent>('PhysicsBody')?.body;
+                                const humanBody = humanEntity?.getComponent<PhysicsBodyComponent>('PhysicsBody')?.body;
+
+                                scene.physics.world.bodies.entries.forEach((body: any) => {
+                                    if (body === catBody || body === dogBody || body === humanBody) {
+                                        return;
+                                    }
+                                    const bodyRect = new Phaser.Geom.Rectangle(body.x, body.y, body.width, body.height);
+                                    if (Phaser.Geom.Intersects.RectangleToRectangle(leftCheckRect, bodyRect)) {
+                                        isBlockedLeft = true;
+                                    }
+                                    if (Phaser.Geom.Intersects.RectangleToRectangle(rightCheckRect, bodyRect)) {
+                                        isBlockedRight = true;
+                                    }
+                                });
 
                                 let direction = 0; // -1 for left, 1 for right
 
@@ -204,9 +224,9 @@ export class CatSystem {
                 // Stop if we hit target distance (5 spaces = 90px)
                 const reachedDistance = distanceTraveled >= cat.targetDistance;
 
-                // Stop if we hit a wall in our running direction
-                const hitWall = (cat.direction === 1 && catBody.blocked.right) || 
-                                (cat.direction === -1 && catBody.blocked.left);
+                // Stop if we hit a wall/obstacle in our running direction
+                const hitWall = (cat.direction === 1 && (catBody.blocked.right || catBody.touching.right)) || 
+                                (cat.direction === -1 && (catBody.blocked.left || catBody.touching.left));
 
                 if (reachedDistance || hitWall) {
                     catBody.setVelocityX(0);

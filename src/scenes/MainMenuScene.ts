@@ -19,9 +19,25 @@ export class MainMenuScene extends Phaser.Scene {
         const width = GAME_WIDTH;
         const height = GAME_HEIGHT;
 
-        // Static background
-        const bg = this.add.image(width / 2, height / 2, 'default_bg');
-        bg.setDisplaySize(width, height);
+        // Random background selection (excluding default_bg)
+        const bgTypes = ['grassyMountain', 'snowyMountain'];
+        const chosenBg = bgTypes[Math.floor(Math.random() * bgTypes.length)];
+
+        if (chosenBg === 'grassyMountain') {
+            this.cameras.main.setBackgroundColor('#c9d7e7');
+            const layers = ['grassyMountain_4', 'grassyMountain_3', 'grassyMountain_2', 'grassyMountain_1'];
+            layers.forEach(key => {
+                const img = this.add.image(width / 2, height / 2, key);
+                img.setDisplaySize(width, height);
+            });
+        } else {
+            this.cameras.main.setBackgroundColor('#e9f1f6');
+            const layers = ['snowyMountain_5', 'snowyMountain_4', 'snowyMountain_3', 'snowyMountain_2', 'snowyMountain_1'];
+            layers.forEach(key => {
+                const img = this.add.image(width / 2, height / 2, key);
+                img.setDisplaySize(width, height);
+            });
+        }
 
         // Dark overlay
         const overlay = this.add.graphics();

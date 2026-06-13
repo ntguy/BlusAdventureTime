@@ -1290,13 +1290,13 @@ export class EditorScene extends Phaser.Scene {
             this.selectedEntityText.setColor('#ff33aa');
             this.editPropsButton.setVisible(true);
         } else if (ent.type === 'flying') {
-            const startFrame = props.startFrame !== undefined ? props.startFrame : 120;
+            const style = props.style !== undefined ? props.style : 1;
             const endX = props.endX !== undefined ? Number(props.endX) : 0;
             const endY = props.endY !== undefined ? Number(props.endY) : 0;
             const vel = props.velocity || 60;
             const endXDisp = (endX >= 0 ? '+' : '') + endX;
             const endYDisp = (endY >= 0 ? '+' : '') + endY;
-            this.selectedEntityText.setText(`Selected: ${name}\nFrame: ${startFrame}\nEndOffset: ${endXDisp},${endYDisp}\nVel: ${vel}`);
+            this.selectedEntityText.setText(`Selected: ${name}\nStyle: ${style}\nEndOffset: ${endXDisp},${endYDisp}\nVel: ${vel}`);
             this.selectedEntityText.setColor('#a233ff');
             this.editPropsButton.setVisible(true);
         } else if (ent.type === 'gate') {
@@ -1532,15 +1532,16 @@ export class EditorScene extends Phaser.Scene {
                 });
             } else if (ent.type === 'flying') {
                 this.showPropertyForm("Flying Entity Properties", [
-                    { key: 'startFrame', label: 'Start Frame Index (3-frame anim)', type: 'text', value: String(props.startFrame !== undefined ? props.startFrame : "120") },
+                    { key: 'style', label: 'Style (1 = flying, 2 = ground)', type: 'text', value: String(props.style !== undefined ? props.style : "1") },
                     { key: 'endX', label: 'Relative End Tile X Offset', type: 'text', value: String(props.endX !== undefined ? props.endX : "0") },
                     { key: 'endY', label: 'Relative End Tile Y Offset', type: 'text', value: String(props.endY !== undefined ? props.endY : "0") },
                     { key: 'velocity', label: 'Velocity (px/s)', type: 'text', value: String(props.velocity || "60") }
                 ], (values) => {
+                    const parsedStyle = parseInt(values.style.trim());
                     const parsedEndX = parseInt(values.endX.trim());
                     const parsedEndY = parseInt(values.endY.trim());
                     ent.properties = {
-                        startFrame: parseInt(values.startFrame.trim()) || 120,
+                        style: isNaN(parsedStyle) ? 1 : parsedStyle,
                         endX: isNaN(parsedEndX) ? 0 : parsedEndX,
                         endY: isNaN(parsedEndY) ? 0 : parsedEndY,
                         velocity: parseInt(values.velocity.trim()) || 60

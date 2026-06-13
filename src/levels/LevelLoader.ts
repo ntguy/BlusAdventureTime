@@ -120,6 +120,7 @@ export class LevelLoader {
         const gatesGroup = scene.physics.add.group();
         const launchersGroup = scene.physics.add.group();
         const movingPlatformsGroup = scene.physics.add.group();
+        const catsGroup = scene.physics.add.group();
 
         // Pre-scan entities to map channels to their configured glow colors
         const channelGlowColors = new Map<string, number>();
@@ -371,12 +372,14 @@ export class LevelLoader {
 
                 const sprite = scene.physics.add.sprite(entX, entY, 'catIdle', 0);
                 sprite.setDepth(8);
+                catsGroup.add(sprite);
                 sprite.play('cat_idle');
                 sprite.setFlipX(initialFacing === 'left');
 
                 const body = sprite.body as Phaser.Physics.Arcade.Body;
                 body.setSize(16, 18);
                 body.setOffset(8, 5);
+                body.setImmovable(true);
 
                 // Add collision bounds for cat
                 scene.physics.add.collider(sprite, terrainLayer);
@@ -392,7 +395,7 @@ export class LevelLoader {
                     depth: 8
                 } as RenderComponent);
                 entity.addComponent({ type: 'PhysicsBody', body, isGrounded: false } as PhysicsBodyComponent);
-                entity.addComponent({
+                const catComp = {
                     type: 'Cat',
                     state: 'sleeping',
                     startX: sprite.x,
@@ -401,7 +404,9 @@ export class LevelLoader {
                     targetDistance: 90,
                     startleTimer: 0,
                     initialFacing: initialFacing
-                } as CatComponent);
+                } as CatComponent;
+                entity.addComponent(catComp);
+                (sprite as any).catComponent = catComp;
 
             } else if (entData.type === 'sign') {
                 const props = entData.properties || {};
@@ -430,15 +435,18 @@ export class LevelLoader {
                 const endX = entData.x + Number(props.endX || 0);
                 const endY = entData.y + Number(props.endY || 0);
                 const velocity = props.velocity !== undefined ? Number(props.velocity) : 60;
-                const startFrame = props.startFrame !== undefined ? Number(props.startFrame) : 120;
+                
+                const style = props.style !== undefined ? Number(props.style) : 1;
+                const startFrame = style === 2 ? 15 : 24;
+                const texture = 'tilemap_characters';
 
-                const visual = getVisual(startFrame);
-                const sprite = scene.physics.add.sprite(entX, entY, visual.texture, visual.frame);
+                const sprite = scene.physics.add.sprite(entX, entY, texture, startFrame);
                 sprite.setDepth(8);
 
                 const body = sprite.body as Phaser.Physics.Arcade.Body;
                 body.setAllowGravity(false);
-                body.setSize(14, 14);
+                body.setSize(12, 12);
+                body.setOffset(6, 6);
 
                 // Add collision with terrain
                 scene.physics.add.collider(sprite, terrainLayer);
@@ -449,8 +457,8 @@ export class LevelLoader {
                     type: 'Render',
                     gameObject: sprite,
                     depth: 8,
-                    idleFrame: visual.frame,
-                    activeFrame: visual.activeFrame
+                    idleFrame: startFrame,
+                    activeFrame: startFrame
                 } as RenderComponent);
                 entity.addComponent({
                     type: 'PhysicsBody',
@@ -831,6 +839,34 @@ export class LevelLoader {
         scene.physics.add.collider(p1Render.gameObject, terrainLayer);
         scene.physics.add.collider(p2Render.gameObject, terrainLayer);
         scene.physics.add.collider(cratesGroup, terrainLayer);
+        scene.physics.add.collider(catsGroup, terrainLayer);
+        scene.physics.add.collider(
+            catsGroup,
+            cratesGroup,
+            undefined,
+            (catObj: any, crateObj: any) => {
+                const catComp = catObj.catComponent as CatComponent;
+                if (catComp && catComp.state === 'running') {
+                    const catBody = catObj.body as Phaser.Physics.Arcade.Body;
+                    const crateBody = crateObj.body as Phaser.Physics.Arcade.Body;
+                    
+                    // Only stop if running towards the crate
+                    const crateIsRight = crateBody.x > catBody.x;
+                    const runningTowards = (catComp.direction === 1 && crateIsRight) || 
+                                           (catComp.direction === -1 && !crateIsRight);
+                                           
+                    if (runningTowards) {
+                        catComp.state = 'sleeping';
+                        catBody.setVelocityX(0);
+                        return false; // prevent separation so the cat doesn't push the crate
+                    } else {
+                        return false; // running away: ignore collision so it can move freely
+                    }
+                }
+                return true; // allow normal separation when cat is sleeping/idle
+            },
+            scene
+        );
 
         scene.physics.add.collider(
             p1Render.gameObject,
@@ -839,6 +875,7 @@ export class LevelLoader {
             (playerObj: any, crateObj: any) => {
                 const playerBody = playerObj.body as Phaser.Physics.Arcade.Body;
                 const crateBody = crateObj.body as Phaser.Physics.Arcade.Body;
+
                 // If player is standing on top of the crate (with 2px vertical threshold),
                 // disable side collisions so they don't push it while walking near the edge.
                 if (playerBody.bottom <= crateBody.y + 2) {

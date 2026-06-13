@@ -48,6 +48,13 @@ export class PreloadScene extends Phaser.Scene {
             endFrame: FALL_TILESET_COLS * FALL_TILESET_ROWS - 1,
         });
 
+        this.load.spritesheet('tilemap_characters', 'assets/sprites/tilemap-characters_packed.png', {
+            frameWidth: 24,
+            frameHeight: 24,
+            startFrame: 0,
+            endFrame: 26,
+        });
+
 
 
         // Load custom full-screen background image
@@ -107,10 +114,12 @@ export class PreloadScene extends Phaser.Scene {
 
         // ── Level data ──
         this.load.json('test_level', 'assets/levels/test_level.json');
-        this.load.json('Lvl1-Jun8', 'assets/levels/Lvl1-Jun8.json');
-        this.load.json('Lvl2-Jun9', 'assets/levels/Lvl2-Jun9.json');
-        this.load.json('Lvl3-Jun9', 'assets/levels/Lvl3-Jun9.json');
-        this.load.json('Lvl4-Jun11', 'assets/levels/Lvl4-Jun11.json');
+        this.load.json('Lvl1', 'assets/levels/Lvl1.json');
+        this.load.json('Lvl2', 'assets/levels/Lvl2.json');
+        this.load.json('Lvl3', 'assets/levels/Lvl3.json');
+        this.load.json('Lvl4', 'assets/levels/Lvl4.json');
+        this.load.json('Lvl5', 'assets/levels/Lvl5.json');
+        this.load.json('Lvl6', 'assets/levels/Lvl6.json');
         this.load.json('LevelSelect', 'assets/levels/LevelSelect.json');
     }
 
