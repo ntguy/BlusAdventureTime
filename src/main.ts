@@ -37,3 +37,20 @@ const game = new Phaser.Game(config);
 
 // Make game accessible for debugging
 (window as any).__PHASER_GAME__ = game;
+
+// Patch Phaser GamepadPlugin crash on shutdown when gamepads array has undefined slots (due to disconnections)
+if (Phaser.Input.Gamepad && Phaser.Input.Gamepad.GamepadPlugin) {
+    (Phaser.Input.Gamepad.GamepadPlugin.prototype as any).stopListeners = function (this: any) {
+        if (this.gamepads) {
+            this.gamepads.forEach((pad: any) => {
+                if (pad && typeof pad.removeAllListeners === 'function') {
+                    try {
+                        pad.removeAllListeners();
+                    } catch (e) {
+                        console.warn('Error during gamepad removeAllListeners:', e);
+                    }
+                }
+            });
+        }
+    };
+}

@@ -50,6 +50,7 @@ export class MainMenuScene extends Phaser.Scene {
             fontSize: '24px',
             color: '#ffffff',
             align: 'center',
+            padding: { top: 8, bottom: 8 }
         }).setOrigin(0.5);
 
         // Draw menu options
@@ -62,6 +63,7 @@ export class MainMenuScene extends Phaser.Scene {
                 fontSize: '16px',
                 color: '#ffffff',
                 align: 'center',
+                padding: { top: 6, bottom: 6 }
             }).setOrigin(0.5);
 
             textObj.setInteractive({ useHandCursor: true });
@@ -132,7 +134,35 @@ export class MainMenuScene extends Phaser.Scene {
         this.input.gamepad?.on('down', (pad: Phaser.Input.Gamepad.Gamepad, button: Phaser.Input.Gamepad.Button) => {
             if (button.index === 12) goUp();     // D-Pad Up
             if (button.index === 13) goDown();   // D-Pad Down
-            if (button.index === 0) this.confirmSelection(); // A Button
+            if (button.index === 0) this.confirmSelection(); // A Button (Cross on PS)
+        });
+
+        let lastAxis9State = 3.2857; // Neutral
+        let lastAxis5Pressed = 0;    // -1 = up, 0 = neutral, 1 = down
+        this.input.gamepad?.on('axis', (pad: Phaser.Input.Gamepad.Gamepad, index: number, value: number) => {
+            if (index === 9) {
+                const wasNeutral = lastAxis9State > 1.0 || lastAxis9State < -1.0;
+                const isNeutral = value > 1.0 || value < -1.0;
+
+                if (wasNeutral && !isNeutral) {
+                    if (value > 0.85 || value < -0.57) {
+                        goUp();
+                    } else if (value > -0.28 && value < 0.57) {
+                        goDown();
+                    }
+                }
+                lastAxis9State = value;
+            } else if (index === 5) {
+                const isUp = value < -0.5;
+                const isDown = value > 0.5;
+                const currentPressedState = isUp ? -1 : (isDown ? 1 : 0);
+
+                if (currentPressedState !== lastAxis5Pressed) {
+                    if (currentPressedState === -1) goUp();
+                    else if (currentPressedState === 1) goDown();
+                }
+                lastAxis5Pressed = currentPressedState;
+            }
         });
     }
 

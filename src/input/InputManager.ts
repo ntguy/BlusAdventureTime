@@ -119,28 +119,58 @@ export class InputManager {
         this.keysReleasedThisFrame.clear();
     }
 
+    private isDpadPressed(gamepad: Phaser.Input.Gamepad.Gamepad, direction: 'up' | 'down' | 'left' | 'right'): boolean {
+        // 1. Check standard buttons
+        if (direction === 'up' && (gamepad.up || (gamepad.buttons[12] && gamepad.buttons[12].pressed))) return true;
+        if (direction === 'down' && (gamepad.down || (gamepad.buttons[13] && gamepad.buttons[13].pressed))) return true;
+        if (direction === 'left' && (gamepad.left || (gamepad.buttons[14] && gamepad.buttons[14].pressed))) return true;
+        if (direction === 'right' && (gamepad.right || (gamepad.buttons[15] && gamepad.buttons[15].pressed))) return true;
+
+        // 2. Check hat switch (axis 9) common on macOS Bluetooth for PS4/PS5 controllers
+        if (gamepad.axes && gamepad.axes.length > 9) {
+            const val = gamepad.axes[9].value;
+            if (val >= -1.0 && val <= 1.0) {
+                if (direction === 'up') return val > 0.85 || val < -0.57;
+                if (direction === 'down') return val > -0.28 && val < 0.57;
+                if (direction === 'left') return val > 0.28 && val < 1.01;
+                if (direction === 'right') return val > -0.85 && val < -0.01;
+            }
+        }
+
+        // 3. Check separate axes (axis 4/5) fallback
+        if (gamepad.axes && gamepad.axes.length > 5) {
+            if (direction === 'left') return gamepad.axes[4].value < -0.5;
+            if (direction === 'right') return gamepad.axes[4].value > 0.5;
+            if (direction === 'up') return gamepad.axes[5].value < -0.5;
+            if (direction === 'down') return gamepad.axes[5].value > 0.5;
+        }
+
+        return false;
+    }
+
     /** Helper to poll direct boolean input states for gamepads */
     private pollGamepadAction(playerIndex: number, action: Action): boolean {
-        // Player 1 (Human) maps to Gamepad index 0, Player 2 (Dog) maps to Gamepad index 1
+        // Map connected gamepads sequentially in connection order (ignoring raw sparse browser indices)
         if (!this.scene.input.gamepad) return false;
-        const gamepad = this.scene.input.gamepad.getPad(playerIndex);
+        const gamepads = this.scene.input.gamepad.getAll();
+        const gamepad = gamepads[playerIndex];
         if (!gamepad) return false;
 
         switch (action) {
             case Action.MOVE_LEFT:
-                return gamepad.left || gamepad.leftStick.x < -0.3;
+                return this.isDpadPressed(gamepad, 'left') || gamepad.leftStick.x < -0.3;
             case Action.MOVE_RIGHT:
-                return gamepad.right || gamepad.leftStick.x > 0.3;
+                return this.isDpadPressed(gamepad, 'right') || gamepad.leftStick.x > 0.3;
             case Action.JUMP:
-                return gamepad.A; // South button (Cross on DualSense / A on Xbox)
+                return gamepad.A || (gamepad.buttons[0] && gamepad.buttons[0].pressed); // South button (Cross on DualSense / A on Xbox)
             case Action.MOVE_UP:
-                return gamepad.up || gamepad.leftStick.y < -0.3;
+                return this.isDpadPressed(gamepad, 'up') || gamepad.leftStick.y < -0.3;
             case Action.MOVE_DOWN:
-                return gamepad.down || gamepad.leftStick.y > 0.3;
+                return this.isDpadPressed(gamepad, 'down') || gamepad.leftStick.y > 0.3;
             case Action.INTERACT:
-                return gamepad.X || gamepad.B; // West or East buttons (Square/Circle on DualSense / X/B on Xbox)
+                return gamepad.X || (gamepad.buttons[2] && gamepad.buttons[2].pressed); // West button (Square on DualSense / X on Xbox)
             case Action.BARK:
-                return !!gamepad.R1 || !!gamepad.R2 || !!gamepad.L1 || !!gamepad.L2;
+                return gamepad.X || (gamepad.buttons[2] && gamepad.buttons[2].pressed); // West button (Square on DualSense / X on Xbox)
             default:
                 return false;
         }
@@ -192,7 +222,8 @@ export class InputManager {
      */
     vibrate(playerIndex: number, intensity: 'weak' | 'medium' | 'strong', durationMs: number): void {
         if (!this.scene.input.gamepad) return;
-        const gamepad = this.scene.input.gamepad.getPad(playerIndex);
+        const gamepads = this.scene.input.gamepad.getAll();
+        const gamepad = gamepads[playerIndex];
         if (!gamepad) return;
 
         const pad = gamepad.pad;

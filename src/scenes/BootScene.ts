@@ -7,7 +7,11 @@ export class BootScene extends Phaser.Scene {
 
     create(): void {
         if (document.fonts) {
-            document.fonts.ready.then(() => {
+            // Explicitly load custom web fonts to prevent lazy-loading issues
+            Promise.all([
+                document.fonts.load('10px "Press Start 2P"'),
+                document.fonts.load('10px "Outfit"')
+            ]).then(() => {
                 this.scene.start('PreloadScene');
             }).catch(() => {
                 // Fallback in case of error

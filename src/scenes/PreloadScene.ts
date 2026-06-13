@@ -57,8 +57,7 @@ export class PreloadScene extends Phaser.Scene {
 
 
 
-        // Load custom full-screen background image
-        this.load.image('default_bg', 'assets/backgrounds/default_bg.png');
+        // (default_bg.png was removed as it is not used in MainMenuScene)
 
         // Load grassyMountain parallax layers
         this.load.image('grassyMountain_1', 'assets/backgrounds/grassyMountain/Plan 1.png');
