@@ -157,7 +157,10 @@ export class LevelSelectScene extends Phaser.Scene {
         });
 
         // Gamepad B button to go back
-        this.input.gamepad?.on('down', (_pad: Phaser.Input.Gamepad.Gamepad, button: Phaser.Input.Gamepad.Button) => {
+        this.input.gamepad?.on('down', (pad: Phaser.Input.Gamepad.Gamepad, button: Phaser.Input.Gamepad.Button) => {
+            const activePads = InputManager.getActiveGamepads(this);
+            if (!activePads.some(gp => gp.index === pad.index)) return;
+
             if (button.index === 1) { // B Button
                 this.sound.play('sfx_jump', { volume: 0.2, pitch: 0.8 } as any);
                 this.cameras.main.fadeOut(300, 10, 10, 26);

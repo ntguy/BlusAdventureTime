@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../constants';
+import { InputManager } from '../input/InputManager';
 
 export class MainMenuScene extends Phaser.Scene {
     private selectedIndex: number = 0;
@@ -132,6 +133,9 @@ export class MainMenuScene extends Phaser.Scene {
         kb.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE).on('down', () => this.confirmSelection());
 
         this.input.gamepad?.on('down', (pad: Phaser.Input.Gamepad.Gamepad, button: Phaser.Input.Gamepad.Button) => {
+            const activePads = InputManager.getActiveGamepads(this);
+            if (!activePads.some(gp => gp.index === pad.index)) return;
+
             if (button.index === 12) goUp();     // D-Pad Up
             if (button.index === 13) goDown();   // D-Pad Down
             if (button.index === 0) this.confirmSelection(); // A Button (Cross on PS)
@@ -140,6 +144,9 @@ export class MainMenuScene extends Phaser.Scene {
         let lastAxis9State = 3.2857; // Neutral
         let lastAxis5Pressed = 0;    // -1 = up, 0 = neutral, 1 = down
         this.input.gamepad?.on('axis', (pad: Phaser.Input.Gamepad.Gamepad, index: number, value: number) => {
+            const activePads = InputManager.getActiveGamepads(this);
+            if (!activePads.some(gp => gp.index === pad.index)) return;
+
             if (index === 9) {
                 const wasNeutral = lastAxis9State > 1.0 || lastAxis9State < -1.0;
                 const isNeutral = value > 1.0 || value < -1.0;

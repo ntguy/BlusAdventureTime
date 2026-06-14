@@ -80,9 +80,9 @@ export class InputManager {
         }
     }
 
-    private getActiveGamepads(): Phaser.Input.Gamepad.Gamepad[] {
-        if (!this.scene.input.gamepad) return [];
-        let gamepads = this.scene.input.gamepad.getAll();
+    public static getActiveGamepads(scene: Phaser.Scene): Phaser.Input.Gamepad.Gamepad[] {
+        if (!scene.input.gamepad) return [];
+        let gamepads = scene.input.gamepad.getAll();
 
         // Detect if any emulated/virtual Xbox controller is present
         const hasXboxController = gamepads.some(gp => {
@@ -102,12 +102,16 @@ export class InputManager {
                     lowerId.includes('playstation') ||
                     lowerId.includes('dualsense') ||
                     lowerId.includes('dualshock') ||
-                    lowerId.includes('wireless controller')
+                    (lowerId.includes('wireless controller') && !lowerId.includes('xbox'))
                 );
             });
         }
 
         return gamepads;
+    }
+
+    private getActiveGamepads(): Phaser.Input.Gamepad.Gamepad[] {
+        return InputManager.getActiveGamepads(this.scene);
     }
 
     /**
