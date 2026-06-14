@@ -80,6 +80,36 @@ export class InputManager {
         }
     }
 
+    private getActiveGamepads(): Phaser.Input.Gamepad.Gamepad[] {
+        if (!this.scene.input.gamepad) return [];
+        let gamepads = this.scene.input.gamepad.getAll();
+
+        // Detect if any emulated/virtual Xbox controller is present
+        const hasXboxController = gamepads.some(gp => {
+            if (!gp || !gp.id) return false;
+            const lowerId = gp.id.toLowerCase();
+            return lowerId.includes('xbox') || lowerId.includes('xinput') || lowerId.includes('360');
+        });
+
+        // If an Xbox controller is present, ignore raw PlayStation controller inputs
+        // to avoid double-binding when DS4Windows is enabled without "Hide DS4 Controller"
+        if (hasXboxController) {
+            gamepads = gamepads.filter(gp => {
+                if (!gp || !gp.id) return false;
+                const lowerId = gp.id.toLowerCase();
+                return !(
+                    lowerId.includes('sony') ||
+                    lowerId.includes('playstation') ||
+                    lowerId.includes('dualsense') ||
+                    lowerId.includes('dualshock') ||
+                    lowerId.includes('wireless controller')
+                );
+            });
+        }
+
+        return gamepads;
+    }
+
     /**
      * Poll gamepad/keyboard states and shift previous frames.
      * Should be called at the very beginning of the scene update loop.
@@ -87,7 +117,7 @@ export class InputManager {
     update(): void {
         // Dynamic gamepad mapping based on activity
         if (this.scene.input.gamepad) {
-            const gamepads = this.scene.input.gamepad.getAll();
+            const gamepads = this.getActiveGamepads();
 
             // 1. Clean up stale bindings for disconnected pads
             const connectedIndices = new Set(gamepads.map(gp => gp.index));
@@ -173,7 +203,7 @@ export class InputManager {
 
     private getGamepadForPlayer(playerIndex: number): Phaser.Input.Gamepad.Gamepad | null {
         if (!this.scene.input.gamepad) return null;
-        const gamepads = this.scene.input.gamepad.getAll();
+        const gamepads = this.getActiveGamepads();
         
         // Find which gamepad index is mapped to this playerIndex
         for (const [gpIndex, pi] of Array.from(this.gamepadPlayerMap.entries())) {
