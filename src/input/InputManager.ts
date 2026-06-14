@@ -27,6 +27,9 @@ export class InputManager {
     private justDownActions: Set<Action>[] = [new Set(), new Set()];
     private justUpActions: Set<Action>[] = [new Set(), new Set()];
 
+    // Track which gamepad index maps to which player index (0 = Human, 1 = Dog)
+    private gamepadPlayerMap: Map<number, number> = new Map();
+
     constructor(scene: Phaser.Scene) {
         this.scene = scene;
         this.setupKeyboard();
@@ -82,6 +85,33 @@ export class InputManager {
      * Should be called at the very beginning of the scene update loop.
      */
     update(): void {
+        // Dynamic gamepad mapping based on activity
+        if (this.scene.input.gamepad) {
+            const gamepads = this.scene.input.gamepad.getAll();
+
+            // 1. Clean up stale bindings for disconnected pads
+            const connectedIndices = new Set(gamepads.map(gp => gp.index));
+            for (const gpIndex of Array.from(this.gamepadPlayerMap.keys())) {
+                if (!connectedIndices.has(gpIndex)) {
+                    this.gamepadPlayerMap.delete(gpIndex);
+                }
+            }
+
+            // 2. Scan connected pads for button/axis activity to bind to players
+            gamepads.forEach(gamepad => {
+                if (!this.gamepadPlayerMap.has(gamepad.index)) {
+                    if (this.hasGamepadActivity(gamepad)) {
+                        const assignedPlayers = Array.from(this.gamepadPlayerMap.values());
+                        if (!assignedPlayers.includes(0)) {
+                            this.gamepadPlayerMap.set(gamepad.index, 0); // Bind to Player 1 (Human)
+                        } else if (!assignedPlayers.includes(1)) {
+                            this.gamepadPlayerMap.set(gamepad.index, 1); // Bind to Player 2 (Dog)
+                        }
+                    }
+                }
+            });
+        }
+
         for (let pi = 0; pi < 2; pi++) {
             this.justDownActions[pi].clear();
             this.justUpActions[pi].clear();
@@ -119,6 +149,56 @@ export class InputManager {
         this.keysReleasedThisFrame.clear();
     }
 
+    private hasGamepadActivity(gamepad: Phaser.Input.Gamepad.Gamepad): boolean {
+        // Check standard buttons
+        if (gamepad.buttons) {
+            for (let i = 0; i < gamepad.buttons.length; i++) {
+                const btn = gamepad.buttons[i];
+                if (btn && (btn.pressed || btn.value > 0.3)) {
+                    return true;
+                }
+            }
+        }
+        // Check analog axes (excluding hat switch/D-pad axes like index 9)
+        if (gamepad.axes) {
+            for (let i = 0; i < gamepad.axes.length; i++) {
+                const axis = gamepad.axes[i];
+                if (axis && i !== 9 && Math.abs(axis.value) > 0.3) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private getGamepadForPlayer(playerIndex: number): Phaser.Input.Gamepad.Gamepad | null {
+        if (!this.scene.input.gamepad) return null;
+        const gamepads = this.scene.input.gamepad.getAll();
+        
+        // Find which gamepad index is mapped to this playerIndex
+        for (const [gpIndex, pi] of Array.from(this.gamepadPlayerMap.entries())) {
+            if (pi === playerIndex) {
+                const gp = gamepads.find(g => g.index === gpIndex);
+                if (gp) return gp;
+            }
+        }
+
+        // Fallback: If no gamepad is mapped to this player yet, but they are connected,
+        // and we only have 1 active player index mapped or none, we can do a default mapping
+        // to avoid waiting for a button press if they want to move instantly.
+        // But since we want to avoid raw silent controller issues, we only do this fallback
+        // if there's exactly 1 gamepad connected (so no raw/virtual dual-controller conflicts).
+        if (this.gamepadPlayerMap.size === 0 && gamepads.length === 1) {
+            const fallbackGp = gamepads[0];
+            if (playerIndex === 0) {
+                this.gamepadPlayerMap.set(fallbackGp.index, 0);
+                return fallbackGp;
+            }
+        }
+
+        return null;
+    }
+
     private isDpadPressed(gamepad: Phaser.Input.Gamepad.Gamepad, direction: 'up' | 'down' | 'left' | 'right'): boolean {
         // 1. Check standard buttons
         if (direction === 'up' && (gamepad.up || (gamepad.buttons[12] && gamepad.buttons[12].pressed))) return true;
@@ -150,10 +230,9 @@ export class InputManager {
 
     /** Helper to poll direct boolean input states for gamepads */
     private pollGamepadAction(playerIndex: number, action: Action): boolean {
-        // Map connected gamepads sequentially in connection order (ignoring raw sparse browser indices)
+        // Map connected gamepads using dynamic bindings
         if (!this.scene.input.gamepad) return false;
-        const gamepads = this.scene.input.gamepad.getAll();
-        const gamepad = gamepads[playerIndex];
+        const gamepad = this.getGamepadForPlayer(playerIndex);
         if (!gamepad) return false;
 
         switch (action) {
@@ -222,8 +301,7 @@ export class InputManager {
      */
     vibrate(playerIndex: number, intensity: 'weak' | 'medium' | 'strong', durationMs: number): void {
         if (!this.scene.input.gamepad) return;
-        const gamepads = this.scene.input.gamepad.getAll();
-        const gamepad = gamepads[playerIndex];
+        const gamepad = this.getGamepadForPlayer(playerIndex);
         if (!gamepad) return;
 
         const pad = gamepad.pad;

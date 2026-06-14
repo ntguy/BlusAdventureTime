@@ -205,13 +205,6 @@ export class GameScene extends Phaser.Scene {
                 sprite.x = halfWidth - scrollX * scrollFactorX;
                 sprite.y = halfHeight / zoom + halfHeight - TILE_SIZE - bgHeight / 2 + (maxScrollY - scrollY) * scrollFactorY - this.backgroundOffsetY;
             });
-            if (time % 100 < delta) {
-                console.log("GameScene BG SPRITES X:", JSON.stringify(this.backgroundSprites.map(s => s.x)), "Y:", JSON.stringify(this.backgroundSprites.map(s => s.y)), "scrollX/Y:", scrollX, scrollY, "zoom:", zoom);
-            }
-        } else {
-            if (time % 100 < delta) {
-                console.log("GameScene BG SPRITES IS UNDEFINED!");
-            }
         }
 
         // FPS
