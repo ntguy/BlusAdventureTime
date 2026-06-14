@@ -37,15 +37,20 @@ export class InputManager {
         this.scene = scene;
         this.setupKeyboard();
         this.setupGamepadStates();
-
+ 
         // Listen to global key events
         const kb = this.scene.input.keyboard!;
-        kb.on('keydown', (event: KeyboardEvent) => {
-            this.keysPressedThisFrame.add(event.keyCode);
-        });
-        kb.on('keyup', (event: KeyboardEvent) => {
-            this.keysReleasedThisFrame.add(event.keyCode);
-        });
+        if (kb) {
+            kb.on('keydown', (event: KeyboardEvent) => {
+                this.keysPressedThisFrame.add(event.keyCode);
+            });
+            kb.on('keyup', (event: KeyboardEvent) => {
+                this.keysReleasedThisFrame.add(event.keyCode);
+            });
+        }
+
+        // Pre-map connected gamepads sequentially if there are no conflicts
+        this.preMapConnectedGamepads();
     }
 
     private setupKeyboard(): void {
@@ -95,7 +100,34 @@ export class InputManager {
         return InputManager.getActiveGamepads(this.scene);
     }
 
+    public static isXboxGamepad(gp: Phaser.Input.Gamepad.Gamepad): boolean {
+        if (!gp || !gp.id) return false;
+        const lowerId = gp.id.toLowerCase();
+        return lowerId.includes('xbox') || lowerId.includes('xinput') || lowerId.includes('360');
+    }
+
+    public static isPlayStationGamepad(gp: Phaser.Input.Gamepad.Gamepad): boolean {
+        if (!gp || !gp.id) return false;
+        const lowerId = gp.id.toLowerCase();
+        return lowerId.includes('sony') ||
+               lowerId.includes('playstation') ||
+               lowerId.includes('dualsense') ||
+               lowerId.includes('dualshock') ||
+               (lowerId.includes('wireless controller') && !lowerId.includes('xbox'));
+    }
+
     public static areGamepadsDuplicate(gp1: Phaser.Input.Gamepad.Gamepad, gp2: Phaser.Input.Gamepad.Gamepad): boolean {
+        // Only consider them duplicates if one is Xbox and the other is PlayStation
+        const isXbox1 = InputManager.isXboxGamepad(gp1);
+        const isPS1 = InputManager.isPlayStationGamepad(gp1);
+        const isXbox2 = InputManager.isXboxGamepad(gp2);
+        const isPS2 = InputManager.isPlayStationGamepad(gp2);
+
+        const ofDifferentTypes = (isXbox1 && isPS2) || (isPS1 && isXbox2);
+        if (!ofDifferentTypes) {
+            return false;
+        }
+
         // Compare button counts and pressed/value states
         const len1 = gp1.buttons ? gp1.buttons.length : 0;
         const len2 = gp2.buttons ? gp2.buttons.length : 0;
@@ -128,6 +160,32 @@ export class InputManager {
         return true;
     }
 
+    private preMapConnectedGamepads(): void {
+        if (!this.scene.input.gamepad) return;
+        const allPads = this.scene.input.gamepad.getAll().filter(gp => gp && gp.id);
+        if (allPads.length === 0) return;
+
+        // Check if we have both Xbox and PlayStation controllers connected.
+        // If we have mixed types, there might be duplicate emulations (e.g. DS4Windows).
+        // In this case, we do not pre-map; we wait for activity to safely de-duplicate.
+        let hasXbox = false;
+        let hasPS = false;
+        for (const gp of allPads) {
+            if (InputManager.isXboxGamepad(gp)) hasXbox = true;
+            if (InputManager.isPlayStationGamepad(gp)) hasPS = true;
+        }
+        if (hasXbox && hasPS) {
+            return;
+        }
+
+        const gamepads = this.getActiveGamepads();
+        if (gamepads.length > 0) {
+            for (let i = 0; i < Math.min(gamepads.length, 2); i++) {
+                this.gamepadPlayerMap.set(gamepads[i].index, i);
+            }
+        }
+    }
+
     /**
      * Poll gamepad/keyboard states and shift previous frames.
      * Should be called at the very beginning of the scene update loop.
@@ -135,6 +193,11 @@ export class InputManager {
     update(): void {
         // Dynamic gamepad mapping based on activity
         if (this.scene.input.gamepad) {
+            // Pre-map sequentially if there are no duplicate conflicts and map is empty
+            if (this.gamepadPlayerMap.size === 0) {
+                this.preMapConnectedGamepads();
+            }
+
             const allPads = this.scene.input.gamepad.getAll().filter(gp => gp && gp.id);
 
             // 1. Detect duplicates among active, unmapped pads in the same frame
@@ -150,10 +213,8 @@ export class InputManager {
                         const gp1 = activeUnmappedPads[i];
                         const gp2 = activeUnmappedPads[j];
                         if (InputManager.areGamepadsDuplicate(gp1, gp2)) {
-                            const id1 = gp1.id.toLowerCase();
-                            const id2 = gp2.id.toLowerCase();
-                            const isXbox1 = id1.includes('xbox') || id1.includes('xinput') || id1.includes('360');
-                            const isXbox2 = id2.includes('xbox') || id2.includes('xinput') || id2.includes('360');
+                            const isXbox1 = InputManager.isXboxGamepad(gp1);
+                            const isXbox2 = InputManager.isXboxGamepad(gp2);
 
                             // Keep the Xbox emulated controller and mark the raw PlayStation controller as duplicate
                             if (isXbox2 && !isXbox1) {
