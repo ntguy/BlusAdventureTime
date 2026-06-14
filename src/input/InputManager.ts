@@ -30,6 +30,9 @@ export class InputManager {
     // Track which gamepad index maps to which player index (0 = Human, 1 = Dog)
     private gamepadPlayerMap: Map<number, number> = new Map();
 
+    // Track indices of gamepads identified as duplicate inputs (e.g. DS4 direct vs emulated Xbox 360)
+    private static duplicateIndices: Set<number> = new Set();
+
     constructor(scene: Phaser.Scene) {
         this.scene = scene;
         this.setupKeyboard();
@@ -82,36 +85,47 @@ export class InputManager {
 
     public static getActiveGamepads(scene: Phaser.Scene): Phaser.Input.Gamepad.Gamepad[] {
         if (!scene.input.gamepad) return [];
-        let gamepads = scene.input.gamepad.getAll();
-
-        // Detect if any emulated/virtual Xbox controller is present
-        const hasXboxController = gamepads.some(gp => {
-            if (!gp || !gp.id) return false;
-            const lowerId = gp.id.toLowerCase();
-            return lowerId.includes('xbox') || lowerId.includes('xinput') || lowerId.includes('360');
-        });
-
-        // If an Xbox controller is present, ignore raw PlayStation controller inputs
-        // to avoid double-binding when DS4Windows is enabled without "Hide DS4 Controller"
-        if (hasXboxController) {
-            gamepads = gamepads.filter(gp => {
-                if (!gp || !gp.id) return false;
-                const lowerId = gp.id.toLowerCase();
-                return !(
-                    lowerId.includes('sony') ||
-                    lowerId.includes('playstation') ||
-                    lowerId.includes('dualsense') ||
-                    lowerId.includes('dualshock') ||
-                    (lowerId.includes('wireless controller') && !lowerId.includes('xbox'))
-                );
-            });
-        }
-
-        return gamepads;
+        const gamepads = scene.input.gamepad.getAll();
+        
+        // Filter out undefined gamepads and those marked as duplicate inputs
+        return gamepads.filter(gp => gp && gp.id && !InputManager.duplicateIndices.has(gp.index));
     }
 
     private getActiveGamepads(): Phaser.Input.Gamepad.Gamepad[] {
         return InputManager.getActiveGamepads(this.scene);
+    }
+
+    public static areGamepadsDuplicate(gp1: Phaser.Input.Gamepad.Gamepad, gp2: Phaser.Input.Gamepad.Gamepad): boolean {
+        // Compare button counts and pressed/value states
+        const len1 = gp1.buttons ? gp1.buttons.length : 0;
+        const len2 = gp2.buttons ? gp2.buttons.length : 0;
+        const minButtons = Math.min(len1, len2);
+        for (let i = 0; i < minButtons; i++) {
+            const b1 = gp1.buttons[i];
+            const b2 = gp2.buttons[i];
+            if (b1 && b2) {
+                if (b1.pressed !== b2.pressed || Math.abs(b1.value - b2.value) > 0.15) {
+                    return false;
+                }
+            }
+        }
+
+        // Compare axis counts and analog values (excluding index 9 hat switch)
+        const axLen1 = gp1.axes ? gp1.axes.length : 0;
+        const axLen2 = gp2.axes ? gp2.axes.length : 0;
+        const minAxes = Math.min(axLen1, axLen2);
+        for (let i = 0; i < minAxes; i++) {
+            const a1 = gp1.axes[i];
+            const a2 = gp2.axes[i];
+            if (a1 && a2) {
+                if (i === 9) continue;
+                if (Math.abs(a1.value - a2.value) > 0.2) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -121,9 +135,40 @@ export class InputManager {
     update(): void {
         // Dynamic gamepad mapping based on activity
         if (this.scene.input.gamepad) {
+            const allPads = this.scene.input.gamepad.getAll().filter(gp => gp && gp.id);
+
+            // 1. Detect duplicates among active, unmapped pads in the same frame
+            const activeUnmappedPads = allPads.filter(gp => {
+                return !InputManager.duplicateIndices.has(gp.index) && 
+                       !this.gamepadPlayerMap.has(gp.index) &&
+                       this.hasGamepadActivity(gp);
+            });
+
+            if (activeUnmappedPads.length > 1) {
+                for (let i = 0; i < activeUnmappedPads.length; i++) {
+                    for (let j = i + 1; j < activeUnmappedPads.length; j++) {
+                        const gp1 = activeUnmappedPads[i];
+                        const gp2 = activeUnmappedPads[j];
+                        if (InputManager.areGamepadsDuplicate(gp1, gp2)) {
+                            const id1 = gp1.id.toLowerCase();
+                            const id2 = gp2.id.toLowerCase();
+                            const isXbox1 = id1.includes('xbox') || id1.includes('xinput') || id1.includes('360');
+                            const isXbox2 = id2.includes('xbox') || id2.includes('xinput') || id2.includes('360');
+
+                            // Keep the Xbox emulated controller and mark the raw PlayStation controller as duplicate
+                            if (isXbox2 && !isXbox1) {
+                                InputManager.duplicateIndices.add(gp1.index);
+                            } else {
+                                InputManager.duplicateIndices.add(gp2.index);
+                            }
+                        }
+                    }
+                }
+            }
+
             const gamepads = this.getActiveGamepads();
 
-            // 1. Clean up stale bindings for disconnected pads
+            // 2. Clean up stale bindings for disconnected pads
             const connectedIndices = new Set(gamepads.map(gp => gp.index));
             for (const gpIndex of Array.from(this.gamepadPlayerMap.keys())) {
                 if (!connectedIndices.has(gpIndex)) {
@@ -131,7 +176,7 @@ export class InputManager {
                 }
             }
 
-            // 2. Scan connected pads for button/axis activity to bind to players
+            // 3. Scan connected pads for button/axis activity to bind to players
             gamepads.forEach(gamepad => {
                 if (!this.gamepadPlayerMap.has(gamepad.index)) {
                     if (this.hasGamepadActivity(gamepad)) {
