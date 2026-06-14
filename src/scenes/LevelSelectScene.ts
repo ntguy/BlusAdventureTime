@@ -157,11 +157,13 @@ export class LevelSelectScene extends Phaser.Scene {
         });
 
         // Gamepad B button to go back
+        let lastBackTime = 0;
         this.input.gamepad?.on('down', (pad: Phaser.Input.Gamepad.Gamepad, button: Phaser.Input.Gamepad.Button) => {
-            const activePads = InputManager.getActiveGamepads(this);
-            if (!activePads.some(gp => gp.index === pad.index)) return;
-
             if (button.index === 1) { // B Button
+                const now = this.time.now;
+                if (now - lastBackTime < 300) return;
+                lastBackTime = now;
+
                 this.sound.play('sfx_jump', { volume: 0.2, pitch: 0.8 } as any);
                 this.cameras.main.fadeOut(300, 10, 10, 26);
                 this.cameras.main.once('camerafadeoutcomplete', () => {

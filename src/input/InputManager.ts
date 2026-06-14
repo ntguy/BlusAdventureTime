@@ -30,9 +30,6 @@ export class InputManager {
     // Track which gamepad index maps to which player index (0 = Human, 1 = Dog)
     private gamepadPlayerMap: Map<number, number> = new Map();
 
-    // Track indices of gamepads identified as duplicate inputs (e.g. DS4 direct vs emulated Xbox 360)
-    private static duplicateIndices: Set<number> = new Set();
-
     constructor(scene: Phaser.Scene) {
         this.scene = scene;
         this.setupKeyboard();
@@ -90,45 +87,32 @@ export class InputManager {
 
     public static getActiveGamepads(scene: Phaser.Scene): Phaser.Input.Gamepad.Gamepad[] {
         if (!scene.input.gamepad) return [];
-        const gamepads = scene.input.gamepad.getAll();
-        
-        // Filter out undefined gamepads and those marked as duplicate inputs
-        return gamepads.filter(gp => gp && gp.id && !InputManager.duplicateIndices.has(gp.index));
+        const rawGamepads = scene.input.gamepad.gamepads || [];
+        return rawGamepads.filter((gp): gp is Phaser.Input.Gamepad.Gamepad => gp !== null && gp !== undefined);
     }
 
     private getActiveGamepads(): Phaser.Input.Gamepad.Gamepad[] {
         return InputManager.getActiveGamepads(this.scene);
     }
 
-    public static isXboxGamepad(gp: Phaser.Input.Gamepad.Gamepad): boolean {
-        if (!gp || !gp.id) return false;
-        const lowerId = gp.id.toLowerCase();
-        return lowerId.includes('xbox') || lowerId.includes('xinput') || lowerId.includes('360');
-    }
-
-    public static isPlayStationGamepad(gp: Phaser.Input.Gamepad.Gamepad): boolean {
-        if (!gp || !gp.id) return false;
-        const lowerId = gp.id.toLowerCase();
-        return lowerId.includes('sony') ||
-               lowerId.includes('playstation') ||
-               lowerId.includes('dualsense') ||
-               lowerId.includes('dualshock') ||
-               (lowerId.includes('wireless controller') && !lowerId.includes('xbox'));
-    }
-
     public static areGamepadsDuplicate(gp1: Phaser.Input.Gamepad.Gamepad, gp2: Phaser.Input.Gamepad.Gamepad): boolean {
-        // Only consider them duplicates if one is Xbox and the other is PlayStation
-        const isXbox1 = InputManager.isXboxGamepad(gp1);
-        const isPS1 = InputManager.isPlayStationGamepad(gp1);
-        const isXbox2 = InputManager.isXboxGamepad(gp2);
-        const isPS2 = InputManager.isPlayStationGamepad(gp2);
+        // If they have the same slot index, they are the same Phaser gamepad object.
+        if (gp1.index === gp2.index) {
+            return true;
+        }
 
-        const ofDifferentTypes = (isXbox1 && isPS2) || (isPS1 && isXbox2);
-        if (!ofDifferentTypes) {
+        // If they have the exact same ID string, they must be two separate physical controllers 
+        // of the same model (e.g. two identical Xbox controllers, or two identical PS5 controllers).
+        if (gp1.id === gp2.id) {
             return false;
         }
 
-        // Compare button counts and pressed/value states
+        // Check if there is any active input on either gamepad.
+        // We only perform duplicate detection if at least one gamepad has some user activity.
+        // If both are completely idle, we do not treat them as duplicates.
+        let hasAnyActivity = false;
+
+        // Compare buttons
         const len1 = gp1.buttons ? gp1.buttons.length : 0;
         const len2 = gp2.buttons ? gp2.buttons.length : 0;
         const minButtons = Math.min(len1, len2);
@@ -136,53 +120,53 @@ export class InputManager {
             const b1 = gp1.buttons[i];
             const b2 = gp2.buttons[i];
             if (b1 && b2) {
+                // If either has activity
+                if (b1.pressed || b1.value > 0.15 || b2.pressed || b2.value > 0.15) {
+                    hasAnyActivity = true;
+                }
+                // If their states differ, they cannot be duplicates
                 if (b1.pressed !== b2.pressed || Math.abs(b1.value - b2.value) > 0.15) {
                     return false;
                 }
             }
         }
 
-        // Compare axis counts and analog values (excluding index 9 hat switch)
+        // Compare axes
         const axLen1 = gp1.axes ? gp1.axes.length : 0;
         const axLen2 = gp2.axes ? gp2.axes.length : 0;
         const minAxes = Math.min(axLen1, axLen2);
         for (let i = 0; i < minAxes; i++) {
+            // Skip axis 9 (D-pad hat switch on some macOS/PlayStation drivers)
+            if (i === 9) continue;
+            
             const a1 = gp1.axes[i];
             const a2 = gp2.axes[i];
             if (a1 && a2) {
-                if (i === 9) continue;
+                // Ignore trigger axes (axes 4 & 5) when checking for activity, 
+                // because triggers often default to -1.0 or 1.0 on boot.
+                const isTriggerAxis = i === 4 || i === 5;
+                if (!isTriggerAxis) {
+                    if (Math.abs(a1.value) > 0.25 || Math.abs(a2.value) > 0.25) {
+                        hasAnyActivity = true;
+                    }
+                }
+                // Compare values
                 if (Math.abs(a1.value - a2.value) > 0.2) {
                     return false;
                 }
             }
         }
 
-        return true;
+        // If identical, they are duplicates ONLY if there was actual user activity.
+        return hasAnyActivity;
     }
 
     private preMapConnectedGamepads(): void {
-        if (!this.scene.input.gamepad) return;
-        const allPads = this.scene.input.gamepad.getAll().filter(gp => gp && gp.id);
-        if (allPads.length === 0) return;
-
-        // Check if we have both Xbox and PlayStation controllers connected.
-        // If we have mixed types, there might be duplicate emulations (e.g. DS4Windows).
-        // In this case, we do not pre-map; we wait for activity to safely de-duplicate.
-        let hasXbox = false;
-        let hasPS = false;
-        for (const gp of allPads) {
-            if (InputManager.isXboxGamepad(gp)) hasXbox = true;
-            if (InputManager.isPlayStationGamepad(gp)) hasPS = true;
-        }
-        if (hasXbox && hasPS) {
-            return;
-        }
-
-        const gamepads = this.getActiveGamepads();
-        if (gamepads.length > 0) {
-            for (let i = 0; i < Math.min(gamepads.length, 2); i++) {
-                this.gamepadPlayerMap.set(gamepads[i].index, i);
-            }
+        const gamepads = this.getActiveGamepads().filter(gp => gp && gp.connected);
+        // Only pre-map automatically if there is exactly 1 gamepad connected
+        // to avoid mapping duplicate controllers from DS4Windows/Steam Input.
+        if (gamepads.length === 1) {
+            this.gamepadPlayerMap.set(gamepads[0].index, 0);
         }
     }
 
@@ -198,38 +182,9 @@ export class InputManager {
                 this.preMapConnectedGamepads();
             }
 
-            const allPads = this.scene.input.gamepad.getAll().filter(gp => gp && gp.id);
-
-            // 1. Detect duplicates among active, unmapped pads in the same frame
-            const activeUnmappedPads = allPads.filter(gp => {
-                return !InputManager.duplicateIndices.has(gp.index) && 
-                       !this.gamepadPlayerMap.has(gp.index) &&
-                       this.hasGamepadActivity(gp);
-            });
-
-            if (activeUnmappedPads.length > 1) {
-                for (let i = 0; i < activeUnmappedPads.length; i++) {
-                    for (let j = i + 1; j < activeUnmappedPads.length; j++) {
-                        const gp1 = activeUnmappedPads[i];
-                        const gp2 = activeUnmappedPads[j];
-                        if (InputManager.areGamepadsDuplicate(gp1, gp2)) {
-                            const isXbox1 = InputManager.isXboxGamepad(gp1);
-                            const isXbox2 = InputManager.isXboxGamepad(gp2);
-
-                            // Keep the Xbox emulated controller and mark the raw PlayStation controller as duplicate
-                            if (isXbox2 && !isXbox1) {
-                                InputManager.duplicateIndices.add(gp1.index);
-                            } else {
-                                InputManager.duplicateIndices.add(gp2.index);
-                            }
-                        }
-                    }
-                }
-            }
-
             const gamepads = this.getActiveGamepads();
 
-            // 2. Clean up stale bindings for disconnected pads
+            // 1. Clean up stale bindings for disconnected pads
             const connectedIndices = new Set(gamepads.map(gp => gp.index));
             for (const gpIndex of Array.from(this.gamepadPlayerMap.keys())) {
                 if (!connectedIndices.has(gpIndex)) {
@@ -237,7 +192,7 @@ export class InputManager {
                 }
             }
 
-            // 3. Scan connected pads for button/axis activity to bind to players
+            // 2. Scan connected pads for button/axis activity to bind to players
             gamepads.forEach(gamepad => {
                 if (!this.gamepadPlayerMap.has(gamepad.index)) {
                     if (this.hasGamepadActivity(gamepad)) {
@@ -245,6 +200,11 @@ export class InputManager {
                         if (!assignedPlayers.includes(0)) {
                             this.gamepadPlayerMap.set(gamepad.index, 0); // Bind to Player 1 (Human)
                         } else if (!assignedPlayers.includes(1)) {
+                            // Avoid duplicate binding if this gamepad matches Player 1's gamepad
+                            const p1Gamepad = this.getGamepadForPlayer(0);
+                            if (p1Gamepad && InputManager.areGamepadsDuplicate(gamepad, p1Gamepad)) {
+                                return;
+                            }
                             this.gamepadPlayerMap.set(gamepad.index, 1); // Bind to Player 2 (Dog)
                         }
                     }
@@ -290,7 +250,7 @@ export class InputManager {
     }
 
     private hasGamepadActivity(gamepad: Phaser.Input.Gamepad.Gamepad): boolean {
-        // Check standard buttons
+        // Check standard buttons (value > 0.3)
         if (gamepad.buttons) {
             for (let i = 0; i < gamepad.buttons.length; i++) {
                 const btn = gamepad.buttons[i];
@@ -299,12 +259,15 @@ export class InputManager {
                 }
             }
         }
-        // Check analog axes (excluding hat switch/D-pad axes like index 9)
+        // Check analog sticks (axes 0, 1, 2, 3 only - ignore triggers/sliders at 4, 5, 9, etc.)
         if (gamepad.axes) {
-            for (let i = 0; i < gamepad.axes.length; i++) {
-                const axis = gamepad.axes[i];
-                if (axis && i !== 9 && Math.abs(axis.value) > 0.3) {
-                    return true;
+            const axesToCheck = [0, 1, 2, 3];
+            for (const axisIdx of axesToCheck) {
+                if (axisIdx < gamepad.axes.length) {
+                    const axis = gamepad.axes[axisIdx];
+                    if (axis && Math.abs(axis.value) > 0.35) {
+                        return true;
+                    }
                 }
             }
         }

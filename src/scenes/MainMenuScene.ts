@@ -1,6 +1,5 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../constants';
-import { InputManager } from '../input/InputManager';
 
 export class MainMenuScene extends Phaser.Scene {
     private selectedIndex: number = 0;
@@ -113,15 +112,33 @@ export class MainMenuScene extends Phaser.Scene {
 
     private setupInput(): void {
         const kb = this.input.keyboard!;
-        
+        let lastActionTime = 0;
+        const cooldown = 180; // ms to prevent duplicate inputs from direct/emulated controllers in the same frame
+
         const goUp = () => {
+            const now = this.time.now;
+            if (now - lastActionTime < cooldown) return;
+            lastActionTime = now;
+
             const prevIdx = (this.selectedIndex - 1 + this.menuOptions.length) % this.menuOptions.length;
             this.selectOption(prevIdx);
         };
 
         const goDown = () => {
+            const now = this.time.now;
+            if (now - lastActionTime < cooldown) return;
+            lastActionTime = now;
+
             const nextIdx = (this.selectedIndex + 1) % this.menuOptions.length;
             this.selectOption(nextIdx);
+        };
+
+        const confirm = () => {
+            const now = this.time.now;
+            if (now - lastActionTime < cooldown) return;
+            lastActionTime = now;
+
+            this.confirmSelection();
         };
 
         kb.addKey(Phaser.Input.Keyboard.KeyCodes.W).on('down', goUp);
@@ -129,24 +146,18 @@ export class MainMenuScene extends Phaser.Scene {
         kb.addKey(Phaser.Input.Keyboard.KeyCodes.S).on('down', goDown);
         kb.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN).on('down', goDown);
 
-        kb.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER).on('down', () => this.confirmSelection());
-        kb.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE).on('down', () => this.confirmSelection());
+        kb.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER).on('down', confirm);
+        kb.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE).on('down', confirm);
 
         this.input.gamepad?.on('down', (pad: Phaser.Input.Gamepad.Gamepad, button: Phaser.Input.Gamepad.Button) => {
-            const activePads = InputManager.getActiveGamepads(this);
-            if (!activePads.some(gp => gp.index === pad.index)) return;
-
             if (button.index === 12) goUp();     // D-Pad Up
             if (button.index === 13) goDown();   // D-Pad Down
-            if (button.index === 0) this.confirmSelection(); // A Button (Cross on PS)
+            if (button.index === 0) confirm();   // A Button (Cross on PS)
         });
 
         let lastAxis9State = 3.2857; // Neutral
         let lastAxis5Pressed = 0;    // -1 = up, 0 = neutral, 1 = down
         this.input.gamepad?.on('axis', (pad: Phaser.Input.Gamepad.Gamepad, index: number, value: number) => {
-            const activePads = InputManager.getActiveGamepads(this);
-            if (!activePads.some(gp => gp.index === pad.index)) return;
-
             if (index === 9) {
                 const wasNeutral = lastAxis9State > 1.0 || lastAxis9State < -1.0;
                 const isNeutral = value > 1.0 || value < -1.0;
