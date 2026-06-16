@@ -1821,8 +1821,9 @@
       "y": 11,
       "properties": {
         "listenChannel": "1",
-        "tileGid": 150,
-        "requireAll": true
+        "tileGid": 355,
+        "requireAll": true,
+        "glowColor": "0xf86b50"
       }
     },
     {
@@ -1933,7 +1934,7 @@
         "tileGid": 9,
         "extraTiles": "1,0 -1,0",
         "carryEntities": "true",
-        "glowColor": "0x44aaff",
+        "glowColor": "0xcca047",
         "requireAll": false
       }
     },
@@ -1972,7 +1973,8 @@
       "x": 22,
       "y": 5,
       "properties": {
-        "channel": "2"
+        "channel": "2",
+        "glowColor": "0xcca047"
       }
     },
     {

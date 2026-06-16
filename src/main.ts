@@ -6,6 +6,7 @@ import { MainMenuScene } from './scenes/MainMenuScene';
 import { LevelSelectScene } from './scenes/LevelSelectScene';
 import { EditorScene } from './scenes/EditorScene';
 import { GameScene } from './scenes/GameScene';
+import { PauseScene } from './scenes/PauseScene';
 
 const config: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
@@ -30,7 +31,7 @@ const config: Phaser.Types.Core.GameConfig = {
     input: {
         gamepad: true,
     },
-    scene: [BootScene, PreloadScene, MainMenuScene, LevelSelectScene, EditorScene, GameScene],
+    scene: [BootScene, PreloadScene, MainMenuScene, LevelSelectScene, EditorScene, GameScene, PauseScene],
 };
 
 const game = new Phaser.Game(config);

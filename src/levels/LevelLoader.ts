@@ -20,7 +20,8 @@ import {
     SpikesComponent,
     KeyComponent,
     MovingPlatformComponent,
-    LevelDoorComponent
+    LevelDoorComponent,
+    LGComponent
 } from '../ecs/components';
 import { getMappingByDoorId } from './levelSelectMapping';
 
@@ -91,14 +92,22 @@ export class LevelLoader {
             180 // GID starts at 180
         );
 
-        if (!tileset || !fallTileset) {
+        const industrialTileset = map.addTilesetImage(
+            'tilemap_packed_industrial',
+            'tilemap_packed_industrial',
+            TILE_SIZE, TILE_SIZE,
+            0, 0,
+            292 // GID starts at 292
+        );
+
+        if (!tileset || !fallTileset || !industrialTileset) {
             throw new Error('Failed to create tileset');
         }
 
         // 4. Create layers and fill
-        const bgLayer = map.createBlankLayer('background', [tileset, fallTileset], 0, 0);
-        const terrainLayer = map.createBlankLayer('terrain', [tileset, fallTileset], 0, 0);
-        const fgLayer = map.createBlankLayer('foreground', [tileset, fallTileset], 0, 0);
+        const bgLayer = map.createBlankLayer('background', [tileset, fallTileset, industrialTileset], 0, 0);
+        const terrainLayer = map.createBlankLayer('terrain', [tileset, fallTileset, industrialTileset], 0, 0);
+        const fgLayer = map.createBlankLayer('foreground', [tileset, fallTileset, industrialTileset], 0, 0);
 
         if (!bgLayer || !terrainLayer || !fgLayer) {
             throw new Error('Failed to create tilemap layers');
@@ -121,6 +130,8 @@ export class LevelLoader {
         const launchersGroup = scene.physics.add.group();
         const movingPlatformsGroup = scene.physics.add.group();
         const catsGroup = scene.physics.add.group();
+        const keysGroup = scene.physics.add.group();
+        const lgGroup = scene.physics.add.group();
 
         // Pre-scan entities to map channels to their configured glow colors
         const channelGlowColors = new Map<string, number>();
@@ -178,6 +189,7 @@ export class LevelLoader {
             }
 
             const getFrame = (gid: number) => {
+                if (gid >= 292) return gid - 292;
                 if (gid >= 180) return gid - 180;
                 return gid;
             };
@@ -187,14 +199,14 @@ export class LevelLoader {
                 if (hasBGOverride) {
                     const localIdle = overrideIdleFrame !== undefined ? getFrame(overrideIdleFrame) : getFrame(tileIndex);
                     const localActive = overrideActiveFrame !== undefined ? getFrame(overrideActiveFrame) : localIdle;
-                    let tex = tileIndex >= 180 ? 'tilemap_packed_fall' : 'tilemap_packed';
+                    let tex = tileIndex >= 292 ? 'tilemap_packed_industrial' : (tileIndex >= 180 ? 'tilemap_packed_fall' : 'tilemap_packed');
                     return {
                         texture: tex,
                         frame: localIdle,
                         activeFrame: localActive
                     };
                 }
-                let defaultTexture = defaultFrame >= 180 ? 'tilemap_packed_fall' : 'tilemap_packed';
+                let defaultTexture = defaultFrame >= 292 ? 'tilemap_packed_industrial' : (defaultFrame >= 180 ? 'tilemap_packed_fall' : 'tilemap_packed');
                 return {
                     texture: defaultTexture,
                     frame: getFrame(defaultFrame),
@@ -321,10 +333,13 @@ export class LevelLoader {
                 const visual = getVisual(27);
                 const sprite = scene.physics.add.sprite(entX, entY, visual.texture, visual.frame);
                 sprite.setDepth(8);
+                keysGroup.add(sprite);
                 
                 const body = sprite.body as Phaser.Physics.Arcade.Body;
-                body.setAllowGravity(false);
-                body.checkCollision.none = true;
+                body.setAllowGravity(true);
+                body.checkCollision.none = false;
+                body.setSize(12, 12);
+                body.setOffset(3, 3);
 
                 const entity = entityManager.createEntity();
                 entity.addComponent({ type: 'Transform', x: sprite.x, y: sprite.y, width: 18, height: 18 } as TransformComponent);
@@ -337,6 +352,28 @@ export class LevelLoader {
                 } as RenderComponent);
                 entity.addComponent({ type: 'PhysicsBody', body, isGrounded: false } as PhysicsBodyComponent);
                 entity.addComponent({ type: 'Key', isPickedUp: false } as KeyComponent);
+
+            } else if (entData.type === 'lg') {
+                const visual = getVisual(28);
+                const sprite = scene.physics.add.sprite(entX, entY, visual.texture, visual.frame);
+                sprite.setDepth(8);
+                lgGroup.add(sprite);
+
+                const body = sprite.body as Phaser.Physics.Arcade.Body;
+                body.setAllowGravity(false);
+                body.setImmovable(true);
+
+                const entity = entityManager.createEntity();
+                entity.addComponent({ type: 'Transform', x: sprite.x, y: sprite.y, width: 18, height: 18 } as TransformComponent);
+                entity.addComponent({
+                    type: 'Render',
+                    gameObject: sprite,
+                    depth: 8,
+                    idleFrame: visual.frame,
+                    activeFrame: visual.activeFrame
+                } as RenderComponent);
+                entity.addComponent({ type: 'PhysicsBody', body, isGrounded: false } as PhysicsBodyComponent);
+                entity.addComponent({ type: 'LG' } as LGComponent);
 
             } else if (entData.type === 'checkpoint') {
                 const props = entData.properties || {};
@@ -548,7 +585,9 @@ export class LevelLoader {
                 } as LevelDoorComponent);
 
             } else if (entData.type === 'ladder') {
-                const visual = getVisual(71);
+                const props = entData.properties || {};
+                const tileGid = props.tileGid !== undefined ? Number(props.tileGid) : 71;
+                const visual = getVisual(tileGid);
                 const sprite = scene.add.sprite(entX, entY, visual.texture, visual.frame);
                 sprite.setDepth(4);
 
@@ -644,7 +683,7 @@ export class LevelLoader {
             } else if (entData.type === 'gate') {
                 const props = entData.properties || {};
                 const listenChannel = String(props.listenChannel || '1');
-                const tileGid = props.tileGid !== undefined ? Number(props.tileGid) : 150;
+                const tileGid = props.tileGid !== undefined ? Number(props.tileGid) : 355;
 
                 // Look up glowColor: check if channel has a glow color in our pre-scanned map, or use entity property
                 let glowColor: number | undefined;
@@ -836,10 +875,18 @@ export class LevelLoader {
         const p2Render = player2Entity.getComponent<RenderComponent>('Render')!;
 
         // 8. Bind Physics Colliders
-        scene.physics.add.collider(p1Render.gameObject, terrainLayer);
-        scene.physics.add.collider(p2Render.gameObject, terrainLayer);
-        scene.physics.add.collider(cratesGroup, terrainLayer);
-        scene.physics.add.collider(catsGroup, terrainLayer);
+        const slopeProcessCallback = (obj: any, tile: any) => {
+            const idx = tile.index;
+            if (idx === 248 || idx === 202 || idx === 244 || idx === 251 || idx === 203 || idx === 247) {
+                return false;
+            }
+            return true;
+        };
+
+        scene.physics.add.collider(p1Render.gameObject, terrainLayer, undefined, slopeProcessCallback);
+        scene.physics.add.collider(p2Render.gameObject, terrainLayer, undefined, slopeProcessCallback);
+        scene.physics.add.collider(cratesGroup, terrainLayer, undefined, slopeProcessCallback);
+        scene.physics.add.collider(catsGroup, terrainLayer, undefined, slopeProcessCallback);
         scene.physics.add.collider(
             catsGroup,
             cratesGroup,
@@ -933,6 +980,70 @@ export class LevelLoader {
         scene.physics.add.collider(p1Render.gameObject, movingPlatformsGroup);
         scene.physics.add.collider(p2Render.gameObject, movingPlatformsGroup);
         scene.physics.add.collider(cratesGroup, movingPlatformsGroup);
+
+        const checkPlayerKeyUnlock = (playerObj: any, lgObj: any) => {
+            const playerType = playerObj === p1Render.gameObject ? 'human' : 'dog';
+            const keyEnt = entityManager.query('Key').find(ent => {
+                const kc = ent.getComponent<KeyComponent>('Key')!;
+                return kc.isPickedUp && kc.carrier === playerType;
+            });
+
+            if (keyEnt) {
+                const kc = keyEnt.getComponent<KeyComponent>('Key')!;
+                const lgEnt = entityManager.query('Render').find(ent => {
+                    const render = ent.getComponent<RenderComponent>('Render')!;
+                    return render.gameObject === lgObj;
+                });
+
+                if (lgEnt) {
+                    scene.sound.play('sfx_door_open', { volume: 0.4 });
+                    
+                    if (kc.mouthSprite) {
+                        kc.mouthSprite.destroy();
+                        kc.mouthSprite = undefined;
+                    }
+
+                    const keyRender = keyEnt.getComponent<RenderComponent>('Render')!;
+                    if (keyRender.gameObject) {
+                        keyRender.gameObject.destroy();
+                    }
+                    entityManager.destroyEntity(keyEnt.id);
+
+                    lgObj.destroy();
+                    entityManager.destroyEntity(lgEnt.id);
+                }
+            }
+        };
+
+        scene.physics.add.collider(p1Render.gameObject, lgGroup, checkPlayerKeyUnlock);
+        scene.physics.add.collider(p2Render.gameObject, lgGroup, checkPlayerKeyUnlock);
+        scene.physics.add.collider(cratesGroup, lgGroup);
+
+        scene.physics.add.collider(keysGroup, terrainLayer, undefined, slopeProcessCallback);
+        scene.physics.add.collider(keysGroup, gatesGroup);
+        scene.physics.add.collider(keysGroup, launchersGroup);
+        scene.physics.add.collider(keysGroup, movingPlatformsGroup);
+        scene.physics.add.collider(keysGroup, cratesGroup);
+
+        scene.physics.add.collider(keysGroup, lgGroup, (keyObj: any, lgObj: any) => {
+            const keyEnt = entityManager.query('Key', 'Render').find(ent => {
+                const render = ent.getComponent<RenderComponent>('Render')!;
+                return render.gameObject === keyObj;
+            });
+            const lgEnt = entityManager.query('Render').find(ent => {
+                const render = ent.getComponent<RenderComponent>('Render')!;
+                return render.gameObject === lgObj;
+            });
+            if (lgEnt && keyEnt) {
+                scene.sound.play('sfx_door_open', { volume: 0.4 });
+                
+                lgObj.destroy();
+                entityManager.destroyEntity(lgEnt.id);
+                
+                keyObj.destroy();
+                entityManager.destroyEntity(keyEnt.id);
+            }
+        });
 
         // Link carried entities to moving platforms (extraEntities property or auto-link)
         const platforms = entityManager.query('MovingPlatform');
@@ -1068,10 +1179,12 @@ export class LevelLoader {
                     tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
                 }
 
-                const bgHeight = 324;
+                const baseScale = 1;
+                const renderedHeight = 324 * baseScale;
+                const bgHeight = 512;
                 // Calculate y coordinate to ensure background covers viewport at all camera positions
                 const maxScrollY = Math.max(0, levelHeightPx - vh);
-                const bgY = vh - bgHeight / 2 + maxScrollY * layer.scrollFactorY;
+                const bgY = vh - renderedHeight / 2 + maxScrollY * layer.scrollFactorY;
 
                 const tileSprite = scene.add.tileSprite(
                     levelWidthPx / 2,
@@ -1081,8 +1194,8 @@ export class LevelLoader {
                     layer.key
                 );
 
-                tileSprite.tileScaleX = 1;
-                tileSprite.tileScaleY = 1;
+                tileSprite.tileScaleX = baseScale * (576 / 1024);
+                tileSprite.tileScaleY = baseScale * (324 / 512);
                 tileSprite.setScrollFactor(0, 0);
                 tileSprite.setDepth(-10 + index); // behind map layers (-10 to -7)
 
@@ -1114,10 +1227,12 @@ export class LevelLoader {
                     tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
                 }
 
-                const bgHeight = 324;
+                const baseScale = 1;
+                const renderedHeight = 324 * baseScale;
+                const bgHeight = 512;
                 // Calculate y coordinate to ensure background covers viewport at all camera positions
                 const maxScrollY = Math.max(0, levelHeightPx - vh);
-                const bgY = vh - bgHeight / 2 + maxScrollY * layer.scrollFactorY;
+                const bgY = vh - renderedHeight / 2 + maxScrollY * layer.scrollFactorY;
 
                 const tileSprite = scene.add.tileSprite(
                     levelWidthPx / 2,
@@ -1127,10 +1242,72 @@ export class LevelLoader {
                     layer.key
                 );
 
-                tileSprite.tileScaleX = 1;
-                tileSprite.tileScaleY = 1;
+                tileSprite.tileScaleX = baseScale * (576 / 1024);
+                tileSprite.tileScaleY = baseScale * (324 / 512);
                 tileSprite.setScrollFactor(0, 0);
                 tileSprite.setDepth(-10 + index); // behind map layers (-10 to -6)
+
+                if (group) {
+                    group.add(tileSprite);
+                }
+                if (uiCamera) {
+                    uiCamera.ignore(tileSprite);
+                }
+                sprites.push(tileSprite);
+            });
+        } else if (preset === 'fallTrees') {
+            scene.cameras.main.setBackgroundColor('#a8d8da');
+            const layers = [
+                { key: 'fallTrees_6', scrollFactorX: 0.01, scrollFactorY: 0.005 },
+                { key: 'fallTrees_5', scrollFactorX: 0.05, scrollFactorY: 0.01 },
+                { key: 'fallTrees_4', scrollFactorX: 0.15, scrollFactorY: 0.03 },
+                { key: 'fallTrees_3', scrollFactorX: 0.35, scrollFactorY: 0.05 },
+                { key: 'fallTrees_2', scrollFactorX: 0.55, scrollFactorY: 0.07 },
+                { key: 'fallTrees_1', scrollFactorX: 0.8,  scrollFactorY: 0.1 }
+            ];
+
+            const extraWidth = 2000; // Buffer to prevent seeing background edges
+            const vh = 279; // standard viewport height at 2.0X zoom
+
+            layers.forEach((layer, index) => {
+                // Ensure texture uses NEAREST filtering for pixel-perfect sharpness
+                const tex = scene.textures.get(layer.key);
+                if (tex) {
+                    tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+                }
+
+                const baseScale = 1;
+                const renderedHeight = 324 * baseScale;
+                let bgHeight = 512;
+                let scaleY = baseScale * (324 / 512);
+                // Calculate y coordinate to ensure background covers viewport at all camera positions
+                const maxScrollY = Math.max(0, levelHeightPx - vh);
+                let bgY = vh - renderedHeight / 2 + maxScrollY * layer.scrollFactorY;
+                if (layer.key === 'fallTrees_5') {
+                    bgY -= 64;
+                }
+
+                let spriteY = bgY;
+                if (layer.key === 'fallTrees_1') {
+                    bgHeight = 1024;
+                    // Align the top of the fallTrees_1 layer with the top of other layers (centered at bgY with 512 height)
+                    spriteY = bgY + 256 * scaleY;
+                }
+
+                const tileSprite = scene.add.tileSprite(
+                    levelWidthPx / 2,
+                    spriteY,
+                    levelWidthPx + extraWidth,
+                    bgHeight,
+                    layer.key
+                );
+
+                (tileSprite as any).bgKey = layer.key;
+
+                tileSprite.tileScaleX = baseScale * (576 / 1024);
+                tileSprite.tileScaleY = scaleY;
+                tileSprite.setScrollFactor(0, 0);
+                tileSprite.setDepth(-10 + index); // behind map layers (-10 to -5)
 
                 if (group) {
                     group.add(tileSprite);

@@ -10,7 +10,7 @@ export interface LevelMeta {
 }
 
 export interface EntityData {
-    type: string;           // 'humanSpawn' | 'dogSpawn' | 'exitDoor' | 'crate' | 'key' | 'switch' | 'checkpoint'
+    type: string;           // 'humanSpawn' | 'dogSpawn' | 'exitDoor' | 'crate' | 'key' | 'switch' | 'checkpoint' | 'lg'
     x: number;              // tile column
     y: number;              // tile row
     properties?: Record<string, unknown>;

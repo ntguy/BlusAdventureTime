@@ -177,14 +177,14 @@ export class MovementSystem {
 
                 // Handle Bark trigger
                 if (inputManager.isJustDown(pi, Action.BARK)) {
-                    // Check if KeySystem is handling a key pickup this frame (any key nearby)
+                    // Check if KeySystem is handling a key pickup this frame, currently holding a key, or just dropped one
                     const allKeyEnts = entityManager.query('Key');
-                    const keyPickingUp = allKeyEnts.some(ke => {
+                    const hasKeyOrDropping = allKeyEnts.some(ke => {
                         const kc = ke.getComponent<KeyComponent>('Key')!;
-                        return kc.isPickedUp && kc.mouthSprite;
+                        return (kc.isPickedUp && kc.carrier === 'dog') || kc.justDroppedThisFrame;
                     });
-                    // Only do bark shockwave / sound if not picking up a key
-                    if (!keyPickingUp) {
+                    // Only do bark shockwave / sound if not picking up, holding, or dropping a key
+                    if (!hasKeyOrDropping) {
                         const scene = sprite.scene;
                         const barkIndex = Phaser.Math.Between(1, 7);
                         scene.sound.play(`sfx_bark_${barkIndex}`, { volume: 0.4 });

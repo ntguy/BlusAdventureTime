@@ -52,6 +52,7 @@ export class LevelSelectScene extends Phaser.Scene {
     // Background properties
     private backgroundSprites?: Phaser.GameObjects.TileSprite[];
     private backgroundOffsetY: number = 0;
+    private terrainLayer!: Phaser.Tilemaps.TilemapLayer;
 
     constructor() {
         super({ key: 'LevelSelectScene' });
@@ -69,12 +70,13 @@ export class LevelSelectScene extends Phaser.Scene {
             return;
         }
 
-        const { levelWidthPx, levelHeightPx, player1Entity, player2Entity, backgroundSprites } = LevelLoader.loadLevel(
+        const { levelWidthPx, levelHeightPx, player1Entity, player2Entity, backgroundSprites, terrainLayer } = LevelLoader.loadLevel(
             this,
             levelData,
             this.entityManager,
         );
         this.backgroundSprites = backgroundSprites;
+        this.terrainLayer = terrainLayer;
         this.backgroundOffsetY = levelData?.meta?.backgroundOffsetY || 0;
         this.player1Entity = player1Entity;
         this.player2Entity = player2Entity;
@@ -192,7 +194,7 @@ export class LevelSelectScene extends Phaser.Scene {
         this.flyingSystem.update(this.entityManager, delta);
         this.movingPlatformSystem.update(this.entityManager, delta);
         this.levelDoorSystem.update(this.entityManager, delta, this.inputManager);
-        this.physicsSystem.update(this.entityManager, delta);
+        this.physicsSystem.update(this.entityManager, delta, this.terrainLayer);
         this.renderSystem.update(this.entityManager, delta);
 
         // SFX
@@ -211,31 +213,57 @@ export class LevelSelectScene extends Phaser.Scene {
             const scrollY = camera.scrollY;
             const vh = camera.height / zoom;
             const maxScrollY = Math.max(0, levelHeightPx - vh);
-            const isFiveLayer = this.backgroundSprites.length === 5;
-            const xScrollFactors = isFiveLayer
-                ? [0.02, 0.1, 0.3, 0.6, 0.8]
-                : [0.05, 0.2, 0.5, 0.8];
-            const yScrollFactors = isFiveLayer
-                ? [0.02, 0.06, 0.1, 0.15, 0.2]
-                : [0.05, 0.1, 0.15, 0.2];
+            const numLayers = this.backgroundSprites.length;
+            let xScrollFactors = [0.05, 0.2, 0.5, 0.8];
+            let yScrollFactors = [0.05, 0.1, 0.15, 0.2];
+            if (numLayers === 5) {
+                xScrollFactors = [0.02, 0.1, 0.3, 0.6, 0.8];
+                yScrollFactors = [0.02, 0.06, 0.1, 0.15, 0.2];
+            } else if (numLayers === 6) {
+                xScrollFactors = [0.01, 0.05, 0.15, 0.35, 0.55, 0.8];
+                yScrollFactors = [0.005, 0.01, 0.03, 0.05, 0.07, 0.1];
+            }
             const halfWidth = camera.width / 2;
             const halfHeight = camera.height / 2;
+
+            const baseScale = 1.0;
+
+            const scaleX = (baseScale / zoom) * (576 / 1024);
+            const scaleY = (baseScale / zoom) * (324 / 512);
 
             this.backgroundSprites.forEach((sprite, index) => {
                 const scrollFactorX = xScrollFactors[index] || 0;
                 const scrollFactorY = yScrollFactors[index] || 0;
 
-                // Adjust tile scale to be constant in screen-space (1.0X screen scale)
-                sprite.tileScaleX = 1.0 / zoom;
-                sprite.tileScaleY = 1.0 / zoom;
+                const bgKey = (sprite as any).bgKey || sprite.texture.key;
+
+                // Adjust tile scale to be constant in screen-space
+                sprite.tileScaleX = scaleX;
+                sprite.tileScaleY = scaleY;
 
                 // Set dynamic height matching the texture scale to prevent vertical repeating
-                sprite.height = 324 * sprite.tileScaleY;
+                let currentBgHeight = 512;
+                if (bgKey === 'fallTrees_1') {
+                    currentBgHeight = 1024;
+                }
+                sprite.height = currentBgHeight * sprite.tileScaleY;
                 const bgHeight = sprite.height;
 
                 // Position the background smoothly without snapping to avoid jagged scrolling
                 sprite.x = halfWidth - scrollX * scrollFactorX;
-                sprite.y = halfHeight / zoom + halfHeight - TILE_SIZE - bgHeight / 2 + (maxScrollY - scrollY) * scrollFactorY - this.backgroundOffsetY;
+
+                // Calculations based on the standard 512-height scaleY
+                const bgHeightOther = 512 * scaleY;
+                let bgY = halfHeight / zoom + halfHeight - TILE_SIZE - bgHeightOther / 2 + (maxScrollY - scrollY) * scrollFactorY - this.backgroundOffsetY;
+                if (bgKey === 'fallTrees_5') {
+                    bgY -= 64;
+                }
+
+                if (bgKey === 'fallTrees_1') {
+                    sprite.y = bgY + 256 * scaleY;
+                } else {
+                    sprite.y = bgY;
+                }
             });
         }
     }

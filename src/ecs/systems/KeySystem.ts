@@ -3,11 +3,25 @@ import { KeyComponent, PhysicsBodyComponent, TransformComponent, PlayerComponent
 import { InputManager, Action } from '../../input/InputManager';
 import Phaser from 'phaser';
 
-const PICKUP_RANGE = 20; // pixels — AABB overlap range to allow pickup
+const PICKUP_RANGE = 2; // pixels — AABB overlap range to allow pickup
 
 export class KeySystem {
     update(entityManager: EntityManager, delta: number, inputManager: InputManager): void {
         const keyEntities = entityManager.query('Transform', 'Key', 'Render', 'PhysicsBody');
+        for (const keyEnt of keyEntities) {
+            keyEnt.getComponent<KeyComponent>('Key')!.justDroppedThisFrame = false;
+        }
+
+        let dogCarryingState = keyEntities.some(ke => {
+            const kc = ke.getComponent<KeyComponent>('Key')!;
+            return kc.isPickedUp && kc.carrier === 'dog';
+        });
+
+        let humanCarryingState = keyEntities.some(ke => {
+            const kc = ke.getComponent<KeyComponent>('Key')!;
+            return kc.isPickedUp && kc.carrier === 'human';
+        });
+
         const players = entityManager.query('Player', 'PhysicsBody', 'Render');
 
         const dogEntity = players.find(p => p.getComponent<PlayerComponent>('Player')!.playerType === 'dog');
@@ -47,17 +61,19 @@ export class KeySystem {
                     // Drop key on Spacebar (Action.BARK)
                     if (inputManager.isJustDown(dogPlayer.playerIndex, Action.BARK)) {
                         const isFacingRight = dogSprite.flipX;
-                        const tileX = Math.floor((dogBody.x + dogBody.width / 2 + (isFacingRight ? 18 : -18)) / 18);
-                        const tileY = Math.floor((dogBody.y + dogBody.height / 2) / 18);
+                        const dropX = dogBody.x + dogBody.width / 2 + (isFacingRight ? 12 : -12);
+                        const dropY = dogBody.y + dogBody.height / 2;
 
-                        keyTransform.x = tileX * 18 + 9;
-                        keyTransform.y = tileY * 18 + 9;
-                        keyPhysBody.reset(keyTransform.x, keyTransform.y);
+                        keyTransform.x = dropX;
+                        keyTransform.y = dropY;
+                        keyPhysBody.enable = true;
+                        keyPhysBody.reset(dropX, dropY);
                         keySprite.setVisible(true);
                         keySprite.clearTint();
 
                         keyComp.isPickedUp = false;
                         keyComp.carrier = null;
+                        keyComp.justDroppedThisFrame = true;
                         if (keyComp.mouthSprite) {
                             keyComp.mouthSprite.destroy();
                             keyComp.mouthSprite = undefined;
@@ -65,9 +81,9 @@ export class KeySystem {
                         keySprite.scene.sound.play('sfx_pickup', { volume: 0.3, pitch: 0.8 } as any);
                     }
                 } else if (carrier === 'human' && humanBody && humanSprite && humanPlayer) {
-                    // Position key in hand: to the left of the hitbox, just below center y wise
-                    const handX = humanBody.x - 2;
-                    const handY = humanBody.y + humanBody.height / 2 + 2;
+                    // Position key in hand: shifted 4px right and down
+                    const handX = humanBody.x - 2 + 4;
+                    const handY = humanBody.y + humanBody.height / 2 + 2 + 4;
                     if (keyComp.mouthSprite) {
                         keyComp.mouthSprite.setPosition(handX, handY);
                     }
@@ -75,17 +91,19 @@ export class KeySystem {
                     // Drop key on E (Action.INTERACT)
                     if (inputManager.isJustDown(humanPlayer.playerIndex, Action.INTERACT)) {
                         const isFacingRight = !humanSprite.flipX;
-                        const tileX = Math.floor((humanBody.x + humanBody.width / 2 + (isFacingRight ? 18 : -18)) / 18);
-                        const tileY = Math.floor((humanBody.y + humanBody.height / 2) / 18);
+                        const dropX = humanBody.x + humanBody.width / 2 + (isFacingRight ? 12 : -12);
+                        const dropY = humanBody.y + humanBody.height / 2;
 
-                        keyTransform.x = tileX * 18 + 9;
-                        keyTransform.y = tileY * 18 + 9;
-                        keyPhysBody.reset(keyTransform.x, keyTransform.y);
+                        keyTransform.x = dropX;
+                        keyTransform.y = dropY;
+                        keyPhysBody.enable = true;
+                        keyPhysBody.reset(dropX, dropY);
                         keySprite.setVisible(true);
                         keySprite.clearTint();
 
                         keyComp.isPickedUp = false;
                         keyComp.carrier = null;
+                        keyComp.justDroppedThisFrame = true;
                         if (keyComp.mouthSprite) {
                             keyComp.mouthSprite.destroy();
                             keyComp.mouthSprite = undefined;
@@ -125,15 +143,24 @@ export class KeySystem {
             }
 
             if (dogOverlapping || humanOverlapping) {
-                // Glow yellow while near
-                keySprite.setTint(0xffee00);
+                // Glow yellow while near (only if the player overlapping can actually pick it up)
+                const canDogPickUp = dogOverlapping && !dogCarryingState;
+                const canHumanPickUp = humanOverlapping && !humanCarryingState;
+                
+                if (canDogPickUp || canHumanPickUp) {
+                    keySprite.setTint(0xffee00);
+                } else {
+                    keySprite.clearTint();
+                }
 
                 // Check pickup
-                if (dogOverlapping && dogPlayer && dogBody && dogSprite && inputManager.isJustDown(dogPlayer.playerIndex, Action.BARK)) {
+                if (canDogPickUp && dogPlayer && dogBody && dogSprite && inputManager.isJustDown(dogPlayer.playerIndex, Action.BARK)) {
                     this.pickupKey(keyComp, keySprite, keyPhysBody, dogSprite, dogBody, 'dog');
+                    dogCarryingState = true;
                     inputManager.vibrate(dogPlayer.playerIndex, 'weak', 100);
-                } else if (humanOverlapping && humanPlayer && humanBody && humanSprite && inputManager.isJustDown(humanPlayer.playerIndex, Action.INTERACT)) {
+                } else if (canHumanPickUp && humanPlayer && humanBody && humanSprite && inputManager.isJustDown(humanPlayer.playerIndex, Action.INTERACT)) {
                     this.pickupKey(keyComp, keySprite, keyPhysBody, humanSprite, humanBody, 'human');
+                    humanCarryingState = true;
                     inputManager.vibrate(humanPlayer.playerIndex, 'weak', 100);
                 }
             } else {
@@ -166,8 +193,8 @@ export class KeySystem {
             carryX += mouthOffsetX;
             carryY = carrierBody.y + carrierBody.height - 8;
         } else {
-            carryX = carrierBody.x - 2;
-            carryY = carrierBody.y + carrierBody.height / 2 + 2;
+            carryX = carrierBody.x - 2 + 4;
+            carryY = carrierBody.y + carrierBody.height / 2 + 2 + 4;
         }
 
         const carrySprite = scene.add.sprite(
@@ -176,7 +203,7 @@ export class KeySystem {
             keySprite.texture.key,
             keySprite.frame.name
         );
-        carrySprite.setScale(0.25);
+        carrySprite.setScale(0.6);
         carrySprite.setDepth(12);
         carrySprite.setTint(0xffee00);
 

@@ -1,5 +1,5 @@
 import { EntityManager } from '../Entity';
-import { CatComponent, PhysicsBodyComponent, TransformComponent, PlayerComponent } from '../components';
+import { CatComponent, PhysicsBodyComponent, TransformComponent, PlayerComponent, KeyComponent } from '../components';
 import { InputManager, Action } from '../../input/InputManager';
 import { MovementSystem } from './MovementSystem';
 import Phaser from 'phaser';
@@ -67,7 +67,14 @@ export class CatSystem {
             const player = dogEntity.getComponent<PlayerComponent>('Player')!;
             const dogBody = dogEntity.getComponent<PhysicsBodyComponent>('PhysicsBody')!.body;
 
-            if (inputManager.isJustDown(player.playerIndex, Action.BARK)) {
+            // Check if dog is carrying a key or just dropped one this frame
+            const allKeyEnts = entityManager.query('Key');
+            const hasKeyOrDropping = allKeyEnts.some(ke => {
+                const kc = ke.getComponent<KeyComponent>('Key')!;
+                return (kc.isPickedUp && kc.carrier === 'dog') || kc.justDroppedThisFrame;
+            });
+
+            if (inputManager.isJustDown(player.playerIndex, Action.BARK) && !hasKeyOrDropping) {
                 const dogCenterX = dogBody.x + dogBody.width / 2;
                 const dogCenterY = dogBody.y + dogBody.height / 2;
                 

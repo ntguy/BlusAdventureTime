@@ -8,6 +8,7 @@ export enum Action {
     MOVE_DOWN = 'MOVE_DOWN',
     INTERACT = 'INTERACT',
     BARK = 'BARK',
+    PAUSE = 'PAUSE',
 }
 
 type KeyMapping = Record<Action, Phaser.Input.Keyboard.Key[]>;
@@ -62,6 +63,7 @@ export class InputManager {
             [Action.MOVE_DOWN]: [kb.addKey(Phaser.Input.Keyboard.KeyCodes.S)],
             [Action.INTERACT]: [kb.addKey(Phaser.Input.Keyboard.KeyCodes.E)],
             [Action.BARK]: [],
+            [Action.PAUSE]: [kb.addKey(Phaser.Input.Keyboard.KeyCodes.ESC), kb.addKey(Phaser.Input.Keyboard.KeyCodes.P)],
         };
 
         // Player 2 (Dog): Arrow keys + / + SPACE
@@ -73,6 +75,7 @@ export class InputManager {
             [Action.MOVE_DOWN]: [kb.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN)],
             [Action.INTERACT]: [kb.addKey(Phaser.Input.Keyboard.KeyCodes.FORWARD_SLASH)],
             [Action.BARK]: [kb.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)],
+            [Action.PAUSE]: [kb.addKey(Phaser.Input.Keyboard.KeyCodes.ESC), kb.addKey(Phaser.Input.Keyboard.KeyCodes.P)],
         };
     }
 
@@ -353,6 +356,8 @@ export class InputManager {
                 return gamepad.X || (gamepad.buttons[2] && gamepad.buttons[2].pressed); // West button (Square on DualSense / X on Xbox)
             case Action.BARK:
                 return gamepad.X || (gamepad.buttons[2] && gamepad.buttons[2].pressed); // West button (Square on DualSense / X on Xbox)
+            case Action.PAUSE:
+                return (gamepad.buttons[9] && gamepad.buttons[9].pressed) || (gamepad.buttons[8] && gamepad.buttons[8].pressed);
             default:
                 return false;
         }

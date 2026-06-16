@@ -19,25 +19,15 @@ export class MainMenuScene extends Phaser.Scene {
         const width = GAME_WIDTH;
         const height = GAME_HEIGHT;
 
-        // Random background selection (excluding default_bg)
-        const bgTypes = ['grassyMountain', 'snowyMountain'];
-        const chosenBg = bgTypes[Math.floor(Math.random() * bgTypes.length)];
-
-        if (chosenBg === 'grassyMountain') {
-            this.cameras.main.setBackgroundColor('#c9d7e7');
-            const layers = ['grassyMountain_4', 'grassyMountain_3', 'grassyMountain_2', 'grassyMountain_1'];
-            layers.forEach(key => {
-                const img = this.add.image(width / 2, height / 2, key);
-                img.setDisplaySize(width, height);
-            });
-        } else {
-            this.cameras.main.setBackgroundColor('#e9f1f6');
-            const layers = ['snowyMountain_5', 'snowyMountain_4', 'snowyMountain_3', 'snowyMountain_2', 'snowyMountain_1'];
-            layers.forEach(key => {
-                const img = this.add.image(width / 2, height / 2, key);
-                img.setDisplaySize(width, height);
-            });
-        }
+        // Always use the snowy mountain background
+        this.cameras.main.setBackgroundColor('#e9f1f6');
+        const layers = ['snowyMountain_5', 'snowyMountain_4', 'snowyMountain_3', 'snowyMountain_2', 'snowyMountain_1'];
+        layers.forEach(key => {
+            const tex = this.textures.get(key);
+            if (tex) tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+            const img = this.add.image(width / 2, height / 2, key);
+            img.setDisplaySize(width, height);
+        });
 
         // Dark overlay
         const overlay = this.add.graphics();
@@ -52,6 +42,20 @@ export class MainMenuScene extends Phaser.Scene {
             align: 'center',
             padding: { top: 8, bottom: 8 }
         }).setOrigin(0.5);
+
+        // Position Blu sitting on top of the B
+        const bluSprite = this.add.sprite(0, 0, 'bluSpritesheet');
+        bluSprite.setScale(2);
+        bluSprite.setDepth(100);
+        bluSprite.play('blu_sit');
+
+        this.time.delayedCall(50, () => {
+            if (!this.sys.isActive()) return;
+            const charWidth = this.titleText.width / this.titleText.text.length;
+            const leftEdge = this.titleText.x - this.titleText.width * this.titleText.originX;
+            const topEdge = this.titleText.y - this.titleText.height * this.titleText.originY;
+            bluSprite.setPosition(leftEdge + charWidth / 2 - 1, topEdge - 9);
+        });
 
         // Draw menu options
         this.optionTextObjects = [];

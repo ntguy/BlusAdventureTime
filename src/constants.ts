@@ -7,6 +7,10 @@ export const FALL_TILESET_COLS = 16;
 export const FALL_TILESET_ROWS = 7;
 export const FALL_TILESET_TOTAL = 112;
 
+export const INDUSTRIAL_TILESET_COLS = 16;
+export const INDUSTRIAL_TILESET_ROWS = 7;
+export const INDUSTRIAL_TILESET_TOTAL = 112;
+
 export const GAME_WIDTH = 954;   // 53 tiles at 18px
 export const GAME_HEIGHT = 558;  // 31 tiles at 18px
 

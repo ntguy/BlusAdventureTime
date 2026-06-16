@@ -79,6 +79,7 @@ export class EditorScene extends Phaser.Scene {
         { label: 'DR', type: 'exitDoor', color: '#ff00ff', name: 'EXIT DOOR' },
         { label: 'CR', type: 'crate', color: '#b5651d', name: 'CRATE' },
         { label: 'KY', type: 'key', color: '#ffff00', name: 'KEY' },
+        { label: 'LG', type: 'lg', color: '#ff7700', name: 'LOCK GATE' },
         { label: 'CP', type: 'checkpoint', color: '#0055ff', name: 'CHECKPOINT' },
         { label: 'LD', type: 'ladder', color: '#a8a8a8', name: 'LADDER' },
         { label: 'BT', type: 'button', color: '#ff5555', name: 'BUTTON' },
@@ -201,31 +202,57 @@ export class EditorScene extends Phaser.Scene {
             const scrollY = camera.scrollY;
             const vh = camera.height / zoom;
             const maxScrollY = Math.max(0, levelHeightPx - vh);
-            const isFiveLayer = this.backgroundSprites.length === 5;
-            const xScrollFactors = isFiveLayer
-                ? [0.02, 0.1, 0.3, 0.6, 0.8]
-                : [0.05, 0.2, 0.5, 0.8];
-            const yScrollFactors = isFiveLayer
-                ? [0.02, 0.06, 0.1, 0.15, 0.2]
-                : [0.05, 0.1, 0.15, 0.2];
+            const numLayers = this.backgroundSprites.length;
+            let xScrollFactors = [0.05, 0.2, 0.5, 0.8];
+            let yScrollFactors = [0.05, 0.1, 0.15, 0.2];
+            if (numLayers === 5) {
+                xScrollFactors = [0.02, 0.1, 0.3, 0.6, 0.8];
+                yScrollFactors = [0.02, 0.06, 0.1, 0.15, 0.2];
+            } else if (numLayers === 6) {
+                xScrollFactors = [0.01, 0.05, 0.15, 0.35, 0.55, 0.8];
+                yScrollFactors = [0.005, 0.01, 0.03, 0.05, 0.07, 0.1];
+            }
             const halfWidth = camera.width / 2;
             const halfHeight = camera.height / 2;
+
+            const baseScale = 1.0;
+
+            const scaleX = (baseScale / zoom) * (576 / 1024);
+            const scaleY = (baseScale / zoom) * (324 / 512);
 
             this.backgroundSprites.forEach((sprite, index) => {
                 const scrollFactorX = xScrollFactors[index] || 0;
                 const scrollFactorY = yScrollFactors[index] || 0;
 
-                // Adjust tile scale to be constant in screen-space (1.0X screen scale)
-                sprite.tileScaleX = 1.0 / zoom;
-                sprite.tileScaleY = 1.0 / zoom;
+                const bgKey = (sprite as any).bgKey || sprite.texture.key;
+
+                // Adjust tile scale to be constant in screen-space
+                sprite.tileScaleX = scaleX;
+                sprite.tileScaleY = scaleY;
 
                 // Set dynamic height matching the texture scale to prevent vertical repeating
-                sprite.height = 324 * sprite.tileScaleY;
+                let currentBgHeight = 512;
+                if (bgKey === 'fallTrees_1') {
+                    currentBgHeight = 1024;
+                }
+                sprite.height = currentBgHeight * sprite.tileScaleY;
                 const bgHeight = sprite.height;
 
                 // Position the background smoothly without snapping to avoid jagged scrolling
                 sprite.x = halfWidth - scrollX * scrollFactorX;
-                sprite.y = halfHeight / zoom + halfHeight - TILE_SIZE - bgHeight / 2 + (maxScrollY - scrollY) * scrollFactorY - (this.levelData.meta.backgroundOffsetY || 0);
+
+                // Calculations based on the standard 512-height scaleY
+                const bgHeightOther = 512 * scaleY;
+                let bgY = halfHeight / zoom + halfHeight - TILE_SIZE - bgHeightOther / 2 + (maxScrollY - scrollY) * scrollFactorY - (this.levelData.meta.backgroundOffsetY || 0);
+                if (bgKey === 'fallTrees_5') {
+                    bgY -= 64;
+                }
+
+                if (bgKey === 'fallTrees_1') {
+                    sprite.y = bgY + 256 * scaleY;
+                } else {
+                    sprite.y = bgY;
+                }
             });
         }
     }
@@ -305,9 +332,10 @@ export class EditorScene extends Phaser.Scene {
 
         const tileset = this.map.addTilesetImage('tilemap_packed', 'tilemap_packed', TILE_SIZE, TILE_SIZE, 0, 0, 0)!;
         const fallTileset = this.map.addTilesetImage('tilemap_packed_fall', 'tilemap_packed_fall', TILE_SIZE, TILE_SIZE, 0, 0, 180)!;
+        const industrialTileset = this.map.addTilesetImage('tilemap_packed_industrial', 'tilemap_packed_industrial', TILE_SIZE, TILE_SIZE, 0, 0, 292)!;
 
-        this.bgLayer = this.map.createBlankLayer('background', [tileset, fallTileset], 0, 0)!;
-        this.terrainLayer = this.map.createBlankLayer('terrain', [tileset, fallTileset], 0, 0)!;
+        this.bgLayer = this.map.createBlankLayer('background', [tileset, fallTileset, industrialTileset], 0, 0)!;
+        this.terrainLayer = this.map.createBlankLayer('terrain', [tileset, fallTileset, industrialTileset], 0, 0)!;
 
         this.bgLayer.setDepth(2);
         this.terrainLayer.setDepth(1);
@@ -367,6 +395,7 @@ export class EditorScene extends Phaser.Scene {
             exitDoor: { t: 'DR', c: '#ff00ff' },
             crate: { t: 'CR', c: '#b5651d' },
             key: { t: 'KY', c: '#ffff00' },
+            lg: { t: 'LG', c: '#ff7700' },
             checkpoint: { t: 'CP', c: '#0055ff' },
             ladder: { t: 'LD', c: '#a8a8a8' },
             button: { t: 'BT', c: '#ff5555' },
@@ -398,6 +427,9 @@ export class EditorScene extends Phaser.Scene {
         } else if (ent.type === 'gate') {
             const lCh = props.listenChannel || '1';
             labelText = `G${lCh}`;
+        } else if (ent.type === 'ladder') {
+            const tileGid = props.tileGid !== undefined ? props.tileGid : 71;
+            labelText = `LD${tileGid}`;
         }
 
         const txt = this.add.text(ent.x * TILE_SIZE + TILE_SIZE / 2, ent.y * TILE_SIZE + TILE_SIZE / 2, labelText, {
@@ -898,19 +930,42 @@ export class EditorScene extends Phaser.Scene {
         } else if (this.activeTab === 'entities') {
             if (this.activeTool === 'terrain' || this.activeTool === 'bg') {
                 const existing = this.levelData.entities.find(e => e.x === tileX && e.y === tileY);
-                if (existing) {
+                
+                // Block placing keys inside terrain blocks unless it is inside a lock gate (lg)
+                const hasTerrain = this.levelData.layers.terrain[idx] >= 0;
+                const hasLG = this.levelData.entities.some(e => e.x === tileX && e.y === tileY && e.type === 'lg');
+                if (this.selectedEntityType === 'key' && hasTerrain && !hasLG) {
+                    this.sound.play('sfx_death', { volume: 0.2, pitch: 1.5 } as any);
+                    return;
+                }
+
+                const isPlacingKeyInLG = existing && existing.type === 'lg' && this.selectedEntityType === 'key';
+
+                if (existing && !isPlacingKeyInLG) {
                     this.selectedEntity = existing;
                     this.updateSelectedEntityUI();
                     this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.5 } as any);
                     return;
                 }
 
-                this.removeEntityAt(tileX, tileY);
-                const ent: EntityData = { type: this.selectedEntityType, x: tileX, y: tileY, properties: {} };
-                this.levelData.entities.push(ent);
-                this.drawEntityVisual(ent);
-                this.selectedEntity = ent;
-                this.updateSelectedEntityUI();
+                if (isPlacingKeyInLG) {
+                    // Check if there is already a key here
+                    const alreadyHasKey = this.levelData.entities.some(e => e.x === tileX && e.y === tileY && e.type === 'key');
+                    if (!alreadyHasKey) {
+                        const ent: EntityData = { type: 'key', x: tileX, y: tileY, properties: {} };
+                        this.levelData.entities.push(ent);
+                        this.drawEntityVisual(ent);
+                        this.selectedEntity = ent;
+                        this.updateSelectedEntityUI();
+                    }
+                } else {
+                    this.removeEntityAt(tileX, tileY);
+                    const ent: EntityData = { type: this.selectedEntityType, x: tileX, y: tileY, properties: {} };
+                    this.levelData.entities.push(ent);
+                    this.drawEntityVisual(ent);
+                    this.selectedEntity = ent;
+                    this.updateSelectedEntityUI();
+                }
             } else if (this.activeTool === 'erase') {
                 const existing = this.levelData.entities.find(e => e.x === tileX && e.y === tileY);
                 if (existing && this.selectedEntity === existing) {
@@ -1301,7 +1356,7 @@ export class EditorScene extends Phaser.Scene {
             this.editPropsButton.setVisible(true);
         } else if (ent.type === 'gate') {
             const lCh = props.listenChannel || '1';
-            const tileGid = props.tileGid !== undefined ? props.tileGid : 150;
+            const tileGid = props.tileGid !== undefined ? props.tileGid : 355;
             const glow = props.glowColor ? `\nGlow: ${props.glowColor}` : '';
             this.selectedEntityText.setText(`Selected: ${name}\nListen Ch: ${lCh}\nTile GID: ${tileGid}${glow}`);
             this.selectedEntityText.setColor('#ffaa00');
@@ -1328,6 +1383,11 @@ export class EditorScene extends Phaser.Scene {
             const label = props.label !== undefined ? props.label : `LEVEL ${doorId}`;
             this.selectedEntityText.setText(`Selected: ${name}\nDoor ID: ${doorId}\nLabel: "${label}"`);
             this.selectedEntityText.setColor('#33ff99');
+            this.editPropsButton.setVisible(true);
+        } else if (ent.type === 'ladder') {
+            const tileGid = props.tileGid !== undefined ? props.tileGid : 71;
+            this.selectedEntityText.setText(`Selected: ${name}\nTile GID: ${tileGid}`);
+            this.selectedEntityText.setColor('#a8a8a8');
             this.editPropsButton.setVisible(true);
         } else {
             this.selectedEntityText.setText(`Selected: ${name}\n(No editable properties)`);
@@ -1410,14 +1470,14 @@ export class EditorScene extends Phaser.Scene {
             } else if (ent.type === 'gate') {
                 const lCh = prompt("Enter Listen Channel (e.g. 1, gate_a):", String(props.listenChannel || "1"));
                 if (lCh === null) return;
-                const tileGid = prompt("Enter Tile GID (visual frame index):", String(props.tileGid !== undefined ? props.tileGid : 150));
+                const tileGid = prompt("Enter Tile GID (visual frame index):", String(props.tileGid !== undefined ? props.tileGid : 355));
                 if (tileGid === null) return;
                 const glowColor = prompt("Enter Glow Color (hex, e.g. 0xff5500, or leave empty):", String(props.glowColor || ""));
                 if (glowColor === null) return;
 
                 ent.properties = {
                     listenChannel: lCh.trim() || "1",
-                    tileGid: parseInt(tileGid.trim()) || 150,
+                    tileGid: parseInt(tileGid.trim()) || 355,
                     glowColor: glowColor.trim() ? glowColor.trim() : undefined
                 };
 
@@ -1497,6 +1557,17 @@ export class EditorScene extends Phaser.Scene {
                 this.sound.play('sfx_checkpoint', { volume: 0.3 });
                 this.updateSelectedEntityUI();
                 this.createWorkspaceTilemap();
+            } else if (ent.type === 'ladder') {
+                const tileGid = prompt("Enter Ladder Tile GID (default 71):", String(props.tileGid !== undefined ? props.tileGid : "71"));
+                if (tileGid === null) return;
+
+                ent.properties = {
+                    tileGid: parseInt(tileGid.trim()) || 71
+                };
+
+                this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                this.updateSelectedEntityUI();
+                this.createWorkspaceTilemap();
             }
         } else {
             // UNIFIED FORM SYSTEM FOR REAL PLAYERS
@@ -1553,13 +1624,13 @@ export class EditorScene extends Phaser.Scene {
             } else if (ent.type === 'gate') {
                 this.showPropertyForm("Gate Properties", [
                     { key: 'listenChannel', label: 'Listen Channel', type: 'text', value: String(props.listenChannel || "1") },
-                    { key: 'tileGid', label: 'Tile GID (visual frame index)', type: 'text', value: String(props.tileGid !== undefined ? props.tileGid : "150") },
+                    { key: 'tileGid', label: 'Tile GID (visual frame index)', type: 'text', value: String(props.tileGid !== undefined ? props.tileGid : "355") },
                     { key: 'glowColor', label: 'Glow Color (hex, e.g. 0xff5500, or leave empty)', type: 'text', value: String(props.glowColor || "") },
                     { key: 'requireAll', label: 'Require All Triggers Active (true/false)', type: 'text', value: String(props.requireAll !== undefined ? props.requireAll : "false") }
                 ], (values) => {
                     ent.properties = {
                         listenChannel: values.listenChannel.trim() || "1",
-                        tileGid: parseInt(values.tileGid.trim()) || 150,
+                        tileGid: parseInt(values.tileGid.trim()) || 355,
                         glowColor: values.glowColor.trim() ? values.glowColor.trim() : undefined,
                         requireAll: values.requireAll.trim().toLowerCase() === 'true'
                     };
@@ -1630,6 +1701,18 @@ export class EditorScene extends Phaser.Scene {
                     ent.properties = {
                         doorId: isNaN(parsedDoorId) ? 1 : parsedDoorId,
                         label: values.label.trim()
+                    };
+                    this.sound.play('sfx_checkpoint', { volume: 0.3 });
+                    this.updateSelectedEntityUI();
+                    this.createWorkspaceTilemap();
+                });
+            } else if (ent.type === 'ladder') {
+                this.showPropertyForm("Ladder Properties", [
+                    { key: 'tileGid', label: 'Ladder Tile GID', type: 'text', value: String(props.tileGid !== undefined ? props.tileGid : "71") }
+                ], (values) => {
+                    const parsedTileGid = parseInt(values.tileGid.trim());
+                    ent.properties = {
+                        tileGid: isNaN(parsedTileGid) ? 71 : parsedTileGid
                     };
                     this.sound.play('sfx_checkpoint', { volume: 0.3 });
                     this.updateSelectedEntityUI();
@@ -1836,7 +1919,7 @@ export class EditorScene extends Phaser.Scene {
             // HTML Form Dialog
             this.showPropertyForm("Level Properties", [
                 { key: 'name', label: 'Level Name', type: 'text', value: String(this.levelData.meta.name || "level") },
-                { key: 'background', label: 'Background Preset', type: 'select', options: ['None', 'grassyMountain', 'snowyMountain'], value: String(this.levelData.meta.background || "None") },
+                { key: 'background', label: 'Background Preset', type: 'select', options: ['None', 'grassyMountain', 'snowyMountain', 'fallTrees'], value: String(this.levelData.meta.background || "None") },
                 { key: 'offsetY', label: 'Background Y Offset (px)', type: 'text', value: String(this.levelData.meta.backgroundOffsetY || "0") }
             ], (values) => {
                 const cleanName = values.name.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -2102,7 +2185,13 @@ export class EditorScene extends Phaser.Scene {
     }
 
     private getTileConfig(gid: number): { texture: string, frame: number, scale: number } {
-        if (gid >= 180) {
+        if (gid >= 292) {
+            return {
+                texture: 'tilemap_packed_industrial',
+                frame: gid - 292,
+                scale: 1.5
+            };
+        } else if (gid >= 180) {
             return {
                 texture: 'tilemap_packed_fall',
                 frame: gid - 180,
@@ -2410,12 +2499,46 @@ export class EditorScene extends Phaser.Scene {
                 const destIdx = tileY * w + tileX;
 
                 if (this.dragEntity) {
-                    this.removeEntityAt(tileX, tileY);
-                    this.dragEntity.x = tileX;
-                    this.dragEntity.y = tileY;
-                    this.levelData.entities.push(this.dragEntity);
-                    dropped = true;
-                    this.selectedEntity = this.dragEntity;
+                    const hasTerrain = this.levelData.layers.terrain[destIdx] >= 0;
+                    const hasLG = this.levelData.entities.some(e => e.x === tileX && e.y === tileY && e.type === 'lg');
+                    
+                    if (this.dragEntity.type === 'key' && hasTerrain && !hasLG) {
+                        // Reject and snap back!
+                        this.dragEntity.x = this.dragStartX;
+                        this.dragEntity.y = this.dragStartY;
+                        this.levelData.entities.push(this.dragEntity);
+                        const key = `${this.dragStartX},${this.dragStartY}`;
+                        const originalVisual = this.entityVisuals.get(key);
+                        if (originalVisual) {
+                            originalVisual.setVisible(true);
+                        }
+                        this.sound.play('sfx_death', { volume: 0.2, pitch: 1.5 } as any);
+                    } else {
+                        const isPlacingKeyInLG = hasLG && this.dragEntity.type === 'key';
+                        if (!isPlacingKeyInLG) {
+                            this.removeEntityAt(tileX, tileY);
+                        } else {
+                            const alreadyHasKey = this.levelData.entities.some(e => e.x === tileX && e.y === tileY && e.type === 'key');
+                            if (alreadyHasKey) {
+                                this.dragEntity.x = this.dragStartX;
+                                this.dragEntity.y = this.dragStartY;
+                                this.levelData.entities.push(this.dragEntity);
+                                const key = `${this.dragStartX},${this.dragStartY}`;
+                                const originalVisual = this.entityVisuals.get(key);
+                                if (originalVisual) {
+                                    originalVisual.setVisible(true);
+                                }
+                                this.sound.play('sfx_death', { volume: 0.2, pitch: 1.5 } as any);
+                                this.dragEntity = null;
+                                return;
+                            }
+                        }
+                        this.dragEntity.x = tileX;
+                        this.dragEntity.y = tileY;
+                        this.levelData.entities.push(this.dragEntity);
+                        dropped = true;
+                        this.selectedEntity = this.dragEntity;
+                    }
                 } else if (this.dragTileLayer === 'terrain') {
                     this.levelData.layers.terrain[destIdx] = this.dragTileValue;
                     dropped = true;
@@ -2507,6 +2630,10 @@ export class EditorScene extends Phaser.Scene {
         }
         // tilemap_packed_fall tiles second
         for (let i = 180; i <= 291; i++) {
+            allTiles.push(i);
+        }
+        // tilemap_packed_industrial tiles third
+        for (let i = 292; i <= 403; i++) {
             allTiles.push(i);
         }
 

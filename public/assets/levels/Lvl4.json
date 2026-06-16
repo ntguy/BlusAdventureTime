@@ -2573,7 +2573,7 @@
         "channel": "5",
         "tileGid": 9,
         "carryEntities": "true",
-        "glowColor": "0x44aaff"
+        "glowColor": "0x9353d3"
       }
     },
     {
@@ -2606,8 +2606,9 @@
       "y": 14,
       "properties": {
         "listenChannel": "2",
-        "tileGid": 150,
-        "requireAll": false
+        "tileGid": 355,
+        "requireAll": false,
+        "glowColor": "0xcca047"
       }
     },
     {
@@ -2653,7 +2654,8 @@
       "x": 20,
       "y": 13,
       "properties": {
-        "channel": "5"
+        "channel": "5",
+        "glowColor": "0x9353d3"
       }
     },
     {
@@ -2748,8 +2750,9 @@
       "y": 6,
       "properties": {
         "listenChannel": "1",
-        "tileGid": 150,
-        "requireAll": true
+        "tileGid": 355,
+        "requireAll": true,
+        "glowColor": "0xf86b50"
       }
     },
     {
@@ -2769,7 +2772,7 @@
         "channel": "3",
         "tileGid": 9,
         "carryEntities": "true",
-        "glowColor": "0x44aaff",
+        "glowColor": "0x4fa852",
         "requireAll": false
       }
     },
@@ -2814,7 +2817,8 @@
       "x": 4,
       "y": 10,
       "properties": {
-        "channel": "3"
+        "channel": "3",
+        "glowColor": "0x4fa852"
       }
     },
     {
@@ -2855,8 +2859,9 @@
       "y": 7,
       "properties": {
         "listenChannel": "6",
-        "tileGid": 150,
-        "requireAll": false
+        "tileGid": 355,
+        "requireAll": false,
+        "glowColor": "0xcc8b8c"
       }
     },
     {
@@ -2894,7 +2899,8 @@
       "x": 37,
       "y": 2,
       "properties": {
-        "channel": "6"
+        "channel": "6",
+        "glowColor": "0xcc8b8c"
       }
     },
     {
@@ -2967,7 +2973,7 @@
       "y": 6,
       "properties": {
         "channel": "4",
-        "glowColor": "0xff4400"
+        "glowColor": "0x4895ef"
       }
     },
     {
@@ -2976,8 +2982,9 @@
       "y": 7,
       "properties": {
         "listenChannel": "4",
-        "tileGid": 150,
-        "requireAll": false
+        "tileGid": 355,
+        "requireAll": false,
+        "glowColor": "0x4895ef"
       }
     },
     {
@@ -2986,7 +2993,7 @@
       "y": 15,
       "properties": {
         "channel": "2",
-        "glowColor": "0x44ff00"
+        "glowColor": "0xcca047"
       }
     },
     {
@@ -2995,7 +3002,7 @@
       "y": 14,
       "properties": {
         "channel": "1",
-        "glowColor": "0xffff00"
+        "glowColor": "0xf86b50"
       }
     },
     {
@@ -3004,7 +3011,7 @@
       "y": 12,
       "properties": {
         "channel": "1",
-        "glowColor": "0xffff00"
+        "glowColor": "0xf86b50"
       }
     },
     {
@@ -3013,7 +3020,7 @@
       "y": 9,
       "properties": {
         "channel": "1",
-        "glowColor": "0xffff00"
+        "glowColor": "0xf86b50"
       }
     },
     {
@@ -3022,7 +3029,7 @@
       "y": 4,
       "properties": {
         "channel": "1",
-        "glowColor": "0xffff00"
+        "glowColor": "0xf86b50"
       }
     }
   ]

@@ -144,6 +144,11 @@ export interface KeyComponent extends Component {
     isPickedUp: boolean;
     carrier?: 'dog' | 'human' | null;
     mouthSprite?: Phaser.GameObjects.Sprite; // quarter-size key overlay on dog/human mouth/hand
+    justDroppedThisFrame?: boolean;
+}
+
+export interface LGComponent extends Component {
+    type: 'LG';
 }
 
 export interface MovingPlatformComponent extends Component {
