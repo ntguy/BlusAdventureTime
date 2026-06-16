@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { InputManager, Action } from '../input/InputManager';
 import { AudioManager } from '../audio/AudioManager';
 import { TILE_SIZE } from '../constants';
+import { LEVEL_SELECT_MAPPINGS } from '../levels/levelSelectMapping';
 
 // ECS Architecture & Loader
 import { EntityManager, Entity } from '../ecs/Entity';
@@ -118,12 +119,17 @@ export class GameScene extends Phaser.Scene {
         this.movingPlatformSystem = new MovingPlatformSystem();
         this.exitDoorSystem = new ExitDoorSystem();
 
-        // Wire exit door to return to level select lobby
+        // Wire exit door to return to level select lobby or victory scene if it is the last level
         if (!this.isTestMode && this.fromLobbyDoorId > 0) {
             this.exitDoorSystem.setExitCallback(() => {
                 this.cameras.main.fadeOut(300, 10, 10, 26);
                 this.cameras.main.once('camerafadeoutcomplete', () => {
-                    this.scene.start('LevelSelectScene', { spawnDoorId: this.fromLobbyDoorId });
+                    const lastMapping = LEVEL_SELECT_MAPPINGS[LEVEL_SELECT_MAPPINGS.length - 1];
+                    if (lastMapping && this.levelKey === lastMapping.levelKey) {
+                        this.scene.start('VictoryScene');
+                    } else {
+                        this.scene.start('LevelSelectScene', { spawnDoorId: this.fromLobbyDoorId });
+                    }
                 });
             });
         }

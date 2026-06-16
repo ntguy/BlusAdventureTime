@@ -134,14 +134,21 @@ export class LevelLoader {
         const lgGroup = scene.physics.add.group();
 
         // Pre-scan entities to map channels to their configured glow colors
-        const channelGlowColors = new Map<string, number>();
+        const channelGlowColors = new Map<string, number>([
+            ['1', 0xf86b50],
+            ['2', 0xcca047],
+            ['3', 0x4fa852],
+            ['4', 0x4895ef],
+            ['5', 0x9353d3],
+            ['6', 0xcc8b8c]
+        ]);
         for (const entData of levelData.entities) {
             const props = entData.properties || {};
             const channel = String(props.channel || '');
             if (channel && props.glowColor !== undefined) {
                 const colorStr = String(props.glowColor);
                 const color = parseInt(colorStr.replace('0x', ''), 16);
-                if (!isNaN(color)) {
+                if (!isNaN(color) && color !== 0x44aaff) {
                     channelGlowColors.set(channel, color);
                 }
             }
@@ -613,7 +620,12 @@ export class LevelLoader {
                 let glowColor: number | undefined;
                 if (props.glowColor !== undefined) {
                     const colorStr = String(props.glowColor);
-                    glowColor = parseInt(colorStr.replace('0x', ''), 16) || undefined;
+                    const parsedColor = parseInt(colorStr.replace('0x', ''), 16);
+                    if (!isNaN(parsedColor) && parsedColor !== 0x44aaff) {
+                        glowColor = parsedColor;
+                    } else {
+                        glowColor = channelGlowColors.get(channel);
+                    }
                 } else {
                     glowColor = channelGlowColors.get(channel);
                 }
@@ -652,7 +664,12 @@ export class LevelLoader {
                 let glowColor: number | undefined;
                 if (props.glowColor !== undefined) {
                     const colorStr = String(props.glowColor);
-                    glowColor = parseInt(colorStr.replace('0x', ''), 16) || undefined;
+                    const parsedColor = parseInt(colorStr.replace('0x', ''), 16);
+                    if (!isNaN(parsedColor) && parsedColor !== 0x44aaff) {
+                        glowColor = parsedColor;
+                    } else {
+                        glowColor = channelGlowColors.get(channel);
+                    }
                 } else {
                     glowColor = channelGlowColors.get(channel);
                 }
@@ -689,7 +706,14 @@ export class LevelLoader {
                 let glowColor: number | undefined;
                 if (props.glowColor !== undefined && String(props.glowColor).trim() !== '') {
                     const colorStr = String(props.glowColor);
-                    glowColor = parseInt(colorStr.replace('0x', ''), 16) || undefined;
+                    const parsedColor = parseInt(colorStr.replace('0x', ''), 16);
+                    if (!isNaN(parsedColor) && parsedColor !== 0x44aaff) {
+                        glowColor = parsedColor;
+                    } else if (channelGlowColors.has(listenChannel)) {
+                        glowColor = channelGlowColors.get(listenChannel);
+                    } else {
+                        glowColor = parsedColor || undefined;
+                    }
                 } else if (channelGlowColors.has(listenChannel)) {
                     glowColor = channelGlowColors.get(listenChannel);
                 }
@@ -762,7 +786,14 @@ export class LevelLoader {
                 let glowColor = 0x44aaff;
                 if (props.glowColor !== undefined) {
                     const colorStr = String(props.glowColor);
-                    glowColor = parseInt(colorStr.replace('0x', ''), 16) || 0x44aaff;
+                    const parsedColor = parseInt(colorStr.replace('0x', ''), 16);
+                    if (!isNaN(parsedColor) && parsedColor !== 0x44aaff) {
+                        glowColor = parsedColor;
+                    } else if (channelGlowColors.has(channel)) {
+                        glowColor = channelGlowColors.get(channel)!;
+                    } else {
+                        glowColor = 0x44aaff;
+                    }
                 } else if (channelGlowColors.has(channel)) {
                     glowColor = channelGlowColors.get(channel)!;
                 }

@@ -87,6 +87,9 @@ export class PreloadScene extends Phaser.Scene {
         this.load.image('fallTrees_5', 'assets/backgrounds/fallTrees/Plan-5.png');
         this.load.image('fallTrees_6', 'assets/backgrounds/fallTrees/Plan-6.png');
 
+        // Load Blu real-life photo for victory credits
+        this.load.image('bluRealPhoto', 'assets/sprites/bluRealPhoto.jpg');
+
         // Load Blu dog spritesheet (16x16 frames)
         this.load.spritesheet('bluSpritesheet', 'assets/sprites/bluSpritesheet.png', {
             frameWidth: 16,
