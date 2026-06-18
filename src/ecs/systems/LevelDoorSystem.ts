@@ -119,7 +119,18 @@ export class LevelDoorSystem {
                 inputManager.vibrate(0, 'weak', 100);
 
                 if (sprite?.scene) {
-                    sprite.scene.sound.play('sfx_checkpoint', { volume: 0.4 });
+                    const doorSound = sprite.scene.sound.add('sfx_door_open');
+                    doorSound.play({ volume: 0.4 });
+                    setTimeout(() => {
+                        try {
+                            if (doorSound) {
+                                doorSound.stop();
+                                doorSound.destroy();
+                            }
+                        } catch (e) {
+                            // ignore
+                        }
+                    }, 500);
                 }
 
                 if (this.onEnterLevel) {

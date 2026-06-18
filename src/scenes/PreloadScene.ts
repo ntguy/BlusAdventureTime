@@ -115,11 +115,33 @@ export class PreloadScene extends Phaser.Scene {
         });
 
         // ── Audio ──
-        // Load the single placeholder SFX for all sound effects
-        const placeholderAudio = 'assets/audio/sfx/collect1.mp3';
-        for (const key of Object.values(SFX)) {
-            this.load.audio(key, placeholderAudio);
+        const sfxFiles: Record<string, string> = {
+            sfx_jump: 'assets/audio/sfx/collect1.mp3',
+            sfx_land: 'assets/audio/sfx/landOnGround.mp3',
+            sfx_pickup: 'assets/audio/sfx/collect1.mp3',
+            sfx_drop: 'assets/audio/sfx/collect1.mp3',
+            sfx_door_open: 'assets/audio/sfx/doorOpen.mp3',
+            sfx_checkpoint: 'assets/audio/sfx/checkpoint.mp3',
+            sfx_death: 'assets/audio/sfx/collect1.mp3',
+            sfx_bark: 'assets/audio/sfx/collect1.mp3',
+            sfx_jdeath: 'assets/audio/sfx/JDeath.mp3',
+            sfx_button: 'assets/audio/sfx/Button.mp3',
+            sfx_launcher: 'assets/audio/sfx/launcher.mp3',
+            sfx_menu_select: 'assets/audio/sfx/MenuSelect.mp3',
+            sfx_switch_on: 'assets/audio/sfx/SwitchOn.mp3',
+            sfx_switch_off: 'assets/audio/sfx/SwitchOff.mp3',
+            sfx_unlock: 'assets/audio/sfx/unlock.mp3',
+            sfx_ladder: 'assets/audio/sfx/ladder.mp3'
+        };
+
+        for (const [key, path] of Object.entries(sfxFiles)) {
+            this.load.audio(key, path);
         }
+
+        // Load background music tracks
+        this.load.audio('mus_summer', 'assets/audio/music/summerMusic.mp3');
+        this.load.audio('mus_winter', 'assets/audio/music/WinterMusic.mp3');
+        this.load.audio('mus_fall', 'assets/audio/music/fallMusic.mp3');
 
         // Load the 7 custom barks
         for (let i = 1; i <= 7; i++) {

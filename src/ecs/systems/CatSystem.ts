@@ -187,7 +187,7 @@ export class CatSystem {
                         sprite.play('cat_idle');
                     }
                     sprite.setFlipX(cat.direction === -1);
-                    catBody.setOffset(8, 5);
+                    catBody.setOffset(8, 13);
                 }
 
                 if (cat.exclamation) {
@@ -223,7 +223,7 @@ export class CatSystem {
                         sprite.play('cat_run');
                     }
                     sprite.setFlipX(cat.direction === -1);
-                    catBody.setOffset(8, 5);
+                    catBody.setOffset(8, 13);
                 }
 
                 const distanceTraveled = Math.abs(catBody.x - cat.startX);
@@ -252,7 +252,7 @@ export class CatSystem {
                     } else {
                         sprite.setFlipX(cat.initialFacing === 'left');
                     }
-                    catBody.setOffset(8, 5);
+                    catBody.setOffset(8, 13);
                 }
 
                 if (cat.exclamation) {

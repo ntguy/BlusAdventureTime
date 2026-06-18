@@ -66,7 +66,7 @@ export class LauncherSystem {
                             sprite.setFrame(active);
                         }
                         if (sprite && sprite.scene) {
-                            sprite.scene.sound.play('sfx_jump', { volume: 0.3 } as any);
+                            sprite.scene.sound.play('sfx_launcher', { volume: 0.17 } as any);
                         }
                         if (physEnt.hasComponent('Player')) {
                             const player = physEnt.getComponent<PlayerComponent>('Player')!;

@@ -151,7 +151,7 @@ export class LevelSelectScene extends Phaser.Scene {
         // 8. ESC to return to main menu
         const kb = this.input.keyboard!;
         kb.addKey(Phaser.Input.Keyboard.KeyCodes.ESC).on('down', () => {
-            this.sound.play('sfx_jump', { volume: 0.2, pitch: 0.8 } as any);
+            this.sound.play('sfx_jump', { volume: 0.17, pitch: 0.8 } as any);
             this.cameras.main.fadeOut(300, 10, 10, 26);
             this.cameras.main.once('camerafadeoutcomplete', () => {
                 this.scene.start('MainMenuScene');
@@ -166,7 +166,7 @@ export class LevelSelectScene extends Phaser.Scene {
                 if (now - lastBackTime < 300) return;
                 lastBackTime = now;
 
-                this.sound.play('sfx_jump', { volume: 0.2, pitch: 0.8 } as any);
+                this.sound.play('sfx_jump', { volume: 0.17, pitch: 0.8 } as any);
                 this.cameras.main.fadeOut(300, 10, 10, 26);
                 this.cameras.main.once('camerafadeoutcomplete', () => {
                     this.scene.start('MainMenuScene');
@@ -273,10 +273,10 @@ export class LevelSelectScene extends Phaser.Scene {
         const p2Body = this.player2Entity.getComponent<PhysicsBodyComponent>('PhysicsBody')!;
 
         if (p1Body.body.velocity.y < -0.5 && !this.player1WasAirborne && !p1Body.isGrounded) {
-            this.sound.play('sfx_jump', { volume: 0.15 });
+            this.sound.play('sfx_jump', { volume: 0.1275 });
         }
         if (p2Body.body.velocity.y < -0.5 && !this.player2WasAirborne && !p2Body.isGrounded) {
-            this.sound.play('sfx_jump', { volume: 0.15 });
+            this.sound.play('sfx_jump', { volume: 0.1275 });
         }
     }
 
@@ -292,7 +292,7 @@ export class LevelSelectScene extends Phaser.Scene {
             this.inputManager.vibrate(0, 'weak', 100);
         }
         if (p2Grounded && this.player2WasAirborne) {
-            this.sound.play('sfx_land', { volume: 0.15 });
+            this.sound.play('sfx_land', { volume: 0.15 * 0.6 });
             this.inputManager.vibrate(1, 'weak', 100);
         }
 

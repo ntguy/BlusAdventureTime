@@ -421,9 +421,10 @@ export class LevelLoader {
                 sprite.setFlipX(initialFacing === 'left');
 
                 const body = sprite.body as Phaser.Physics.Arcade.Body;
-                body.setSize(16, 18);
-                body.setOffset(8, 5);
-                body.setImmovable(true);
+                body.setSize(16, 10);
+                body.setOffset(8, 13);
+                body.setImmovable(false);
+                body.setMass(1000);
 
                 // Add collision bounds for cat
                 scene.physics.add.collider(sprite, terrainLayer);
@@ -1027,7 +1028,7 @@ export class LevelLoader {
                 });
 
                 if (lgEnt) {
-                    scene.sound.play('sfx_door_open', { volume: 0.4 });
+                    scene.sound.play('sfx_unlock', { volume: 0.5 });
                     
                     if (kc.mouthSprite) {
                         kc.mouthSprite.destroy();
@@ -1066,7 +1067,7 @@ export class LevelLoader {
                 return render.gameObject === lgObj;
             });
             if (lgEnt && keyEnt) {
-                scene.sound.play('sfx_door_open', { volume: 0.4 });
+                scene.sound.play('sfx_unlock', { volume: 0.5 });
                 
                 lgObj.destroy();
                 entityManager.destroyEntity(lgEnt.id);

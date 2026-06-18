@@ -1,19 +1,35 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../constants';
+import { Settings } from '../settings/Settings';
+import { MusicManager } from '../audio/MusicManager';
 
 export class PauseScene extends Phaser.Scene {
     private selectedIndex: number = 0;
+    
+    // Main Pause Menu Options
     private menuOptions = [
         { label: 'RESUME GAME', action: 'resume' },
         { label: 'RESTART LEVEL', action: 'restart' },
-        { label: 'LEVEL SELECT', action: 'exit' }
+        { label: 'LEVEL SELECT', action: 'exit' },
+        { label: 'SETTINGS', action: 'settings' }
     ];
+
+    // Settings Submenu Options
+    private settingsOptions = [
+        { label: 'MUSIC VOLUME', action: 'music' },
+        { label: 'EFFECT VOLUME', action: 'effects' },
+        { label: 'BACK', action: 'back' }
+    ];
+
+    private inSettings: boolean = false;
 
     private optionTextObjects: Phaser.GameObjects.Text[] = [];
     private highlightBox!: Phaser.GameObjects.Graphics;
     private parentScene!: Phaser.Scene;
+    private cardContainer!: Phaser.GameObjects.Container;
     private createTime: number = 0;
     private lastAxisY: number = 0;
+    private lastAxisX: number = 0;
     private isClosing: boolean = false;
 
     constructor() {
@@ -23,6 +39,7 @@ export class PauseScene extends Phaser.Scene {
     init(data: { parentScene: Phaser.Scene }): void {
         this.parentScene = data.parentScene;
         this.selectedIndex = 0;
+        this.inSettings = false;
         this.isClosing = false;
     }
 
@@ -44,13 +61,13 @@ export class PauseScene extends Phaser.Scene {
             duration: 180
         });
 
-        // 2. Pause Card Panel dimensions
+        // 2. Pause Card Panel dimensions (slightly taller to fit 4 options perfectly)
         const pW = 380;
-        const pH = 210;
+        const pH = 230;
         const pX = width / 2 - pW / 2;
         const pY = height / 2 - pH / 2;
 
-        const cardContainer = this.add.container(0, 0);
+        this.cardContainer = this.add.container(0, 0);
 
         // Graphics for background and woody borders
         const graphics = this.add.graphics();
@@ -104,7 +121,7 @@ export class PauseScene extends Phaser.Scene {
         graphics.lineTo(pX + pW - pad - len, pY + pH - pad);
         graphics.strokePath();
 
-        cardContainer.add(graphics);
+        this.cardContainer.add(graphics);
 
         // 3. Game Paused Title (Gold color with deep bark shadow)
         const titleText = this.add.text(width / 2, pY + 36, "GAME PAUSED", {
@@ -125,21 +142,59 @@ export class PauseScene extends Phaser.Scene {
             ease: 'Sine.easeInOut'
         });
 
-        cardContainer.add(titleText);
+        this.cardContainer.add(titleText);
 
         // 4. Highlight box graphics
         this.highlightBox = this.add.graphics();
-        cardContainer.add(this.highlightBox);
+        this.cardContainer.add(this.highlightBox);
 
-        // 5. Options
+        // Render options initially
+        this.renderMenu();
+
+        // 7. Setup inputs (keyboard and gamepad event handlers)
+        this.setupInputs();
+
+        // Scale-in card animation
+        this.cardContainer.setScale(0.85);
+        this.cardContainer.setAlpha(0.0);
+        this.tweens.add({
+            targets: this.cardContainer,
+            scaleX: 1.0,
+            scaleY: 1.0,
+            alpha: 1.0,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+    }
+
+    private renderMenu(): void {
+        // Clear existing text objects
+        this.optionTextObjects.forEach(t => {
+            this.cardContainer.remove(t);
+            t.destroy();
+        });
         this.optionTextObjects = [];
-        const startY = pY + 86;
-        const spacing = 36;
 
-        this.menuOptions.forEach((option, idx) => {
-            const textObj = this.add.text(width / 2, startY + idx * spacing, option.label, {
+        const width = GAME_WIDTH;
+        const pY = GAME_HEIGHT / 2 - 230 / 2;
+        const startY = pY + 82;
+        const spacing = 32;
+
+        const options = this.inSettings ? this.settingsOptions : this.menuOptions;
+
+        options.forEach((option, idx) => {
+            let label = option.label;
+            if (this.inSettings) {
+                if (option.action === 'music') {
+                    label = `MUSIC VOLUME: < ${Settings.musicVolume} >`;
+                } else if (option.action === 'effects') {
+                    label = `EFFECT VOLUME: < ${Settings.effectsVolume} >`;
+                }
+            }
+
+            const textObj = this.add.text(width / 2, startY + idx * spacing, label, {
                 fontFamily: '"Press Start 2P"',
-                fontSize: '13px',
+                fontSize: '12px',
                 color: '#ffffff',
                 align: 'center'
             }).setOrigin(0.5);
@@ -155,33 +210,17 @@ export class PauseScene extends Phaser.Scene {
             });
 
             this.optionTextObjects.push(textObj);
-            cardContainer.add(textObj);
+            this.cardContainer.add(textObj);
         });
 
-        // Initial highlights
         this.updateMenuHighlight();
-
-        // 7. Setup inputs (keyboard and gamepad event handlers)
-        this.setupInputs();
-
-        // Scale-in card animation
-        cardContainer.setScale(0.85);
-        cardContainer.setAlpha(0.0);
-        this.tweens.add({
-            targets: cardContainer,
-            scaleX: 1.0,
-            scaleY: 1.0,
-            alpha: 1.0,
-            duration: 200,
-            ease: 'Back.easeOut'
-        });
     }
 
     private selectOption(idx: number): void {
         if (idx === this.selectedIndex) return;
         this.selectedIndex = idx;
         this.updateMenuHighlight();
-        this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.4 } as any);
+        this.sound.play('sfx_jump', { volume: 0.085, pitch: 1.4 } as any);
     }
 
     private updateMenuHighlight(): void {
@@ -200,7 +239,7 @@ export class PauseScene extends Phaser.Scene {
         this.highlightBox.clear();
         
         // Draw highlight background behind text
-        const boxW = 260;
+        const boxW = 320;
         const boxH = 26;
         this.highlightBox.fillStyle(0x386641, 0.2); // Forest moss green background
         this.highlightBox.fillRoundedRect(GAME_WIDTH / 2 - boxW / 2, selectedText.y - boxH / 2, boxW, boxH, 4);
@@ -213,16 +252,58 @@ export class PauseScene extends Phaser.Scene {
     private setupInputs(): void {
         const cooldown = 200; // delay to prevent initial double triggers
 
+        const options = this.inSettings ? this.settingsOptions : this.menuOptions;
+
         const goUp = () => {
             if (this.isClosing || this.time.now - this.createTime < cooldown) return;
-            const prev = (this.selectedIndex - 1 + this.menuOptions.length) % this.menuOptions.length;
+            const currentOptions = this.inSettings ? this.settingsOptions : this.menuOptions;
+            const prev = (this.selectedIndex - 1 + currentOptions.length) % currentOptions.length;
             this.selectOption(prev);
         };
 
         const goDown = () => {
             if (this.isClosing || this.time.now - this.createTime < cooldown) return;
-            const next = (this.selectedIndex + 1) % this.menuOptions.length;
+            const currentOptions = this.inSettings ? this.settingsOptions : this.menuOptions;
+            const next = (this.selectedIndex + 1) % currentOptions.length;
             this.selectOption(next);
+        };
+
+        const goLeft = () => {
+            if (this.isClosing || !this.inSettings || this.time.now - this.createTime < cooldown) return;
+            const option = this.settingsOptions[this.selectedIndex];
+            if (option.action === 'music') {
+                if (Settings.musicVolume > 1) {
+                    Settings.musicVolume--;
+                    this.sound.play('sfx_jump', { volume: 0.085, pitch: 1.4 } as any);
+                    MusicManager.getInstance().updateVolume();
+                    this.renderMenu();
+                }
+            } else if (option.action === 'effects') {
+                if (Settings.effectsVolume > 1) {
+                    Settings.effectsVolume--;
+                    this.sound.play('sfx_jump', { volume: 0.085, pitch: 1.4 } as any);
+                    this.renderMenu();
+                }
+            }
+        };
+
+        const goRight = () => {
+            if (this.isClosing || !this.inSettings || this.time.now - this.createTime < cooldown) return;
+            const option = this.settingsOptions[this.selectedIndex];
+            if (option.action === 'music') {
+                if (Settings.musicVolume < 10) {
+                    Settings.musicVolume++;
+                    this.sound.play('sfx_jump', { volume: 0.085, pitch: 1.4 } as any);
+                    MusicManager.getInstance().updateVolume();
+                    this.renderMenu();
+                }
+            } else if (option.action === 'effects') {
+                if (Settings.effectsVolume < 10) {
+                    Settings.effectsVolume++;
+                    this.sound.play('sfx_jump', { volume: 0.085, pitch: 1.4 } as any);
+                    this.renderMenu();
+                }
+            }
         };
 
         const select = () => {
@@ -232,7 +313,13 @@ export class PauseScene extends Phaser.Scene {
 
         const cancel = () => {
             if (this.isClosing || this.time.now - this.createTime < cooldown) return;
-            this.resumeGame();
+            if (this.inSettings) {
+                this.inSettings = false;
+                this.selectedIndex = 3; // Highlight Settings option
+                this.renderMenu();
+            } else {
+                this.resumeGame();
+            }
         };
 
         // Keyboard inputs
@@ -242,6 +329,10 @@ export class PauseScene extends Phaser.Scene {
                 goUp();
             } else if (event.key === 's' || event.key === 'S' || event.keyCode === Phaser.Input.Keyboard.KeyCodes.DOWN) {
                 goDown();
+            } else if (event.key === 'a' || event.key === 'A' || event.keyCode === Phaser.Input.Keyboard.KeyCodes.LEFT) {
+                goLeft();
+            } else if (event.key === 'd' || event.key === 'D' || event.keyCode === Phaser.Input.Keyboard.KeyCodes.RIGHT) {
+                goRight();
             } else if (event.keyCode === Phaser.Input.Keyboard.KeyCodes.ENTER || event.keyCode === Phaser.Input.Keyboard.KeyCodes.SPACE) {
                 select();
             } else if (event.keyCode === Phaser.Input.Keyboard.KeyCodes.ESC || event.key === 'p' || event.key === 'P') {
@@ -256,6 +347,10 @@ export class PauseScene extends Phaser.Scene {
                 goUp();
             } else if (idx === 13) { // D-pad Down
                 goDown();
+            } else if (idx === 14) { // D-pad Left
+                goLeft();
+            } else if (idx === 15) { // D-pad Right
+                goRight();
             } else if (idx === 0) { // A button
                 select();
             } else if (idx === 9 || idx === 8 || idx === 1) { // Start, Options/Select, or B button
@@ -273,48 +368,73 @@ export class PauseScene extends Phaser.Scene {
                     goDown();
                 }
                 this.lastAxisY = value;
+            } else if (index === 0) { // Left Stick X
+                const threshold = 0.5;
+                if (value < -threshold && this.lastAxisX >= -threshold) {
+                    goLeft();
+                } else if (value > threshold && this.lastAxisX <= threshold) {
+                    goRight();
+                }
+                this.lastAxisX = value;
             }
         });
     }
 
     private confirmSelection(): void {
-        const option = this.menuOptions[this.selectedIndex];
-        this.sound.play('sfx_checkpoint', { volume: 0.4 });
-        this.isClosing = true;
+        const currentOptions = this.inSettings ? this.settingsOptions : this.menuOptions;
+        const option = currentOptions[this.selectedIndex];
+        
+        this.sound.play('sfx_menu_select', { volume: 0.25 });
 
-        if (option.action === 'resume') {
-            this.resumeGame();
-        } else if (option.action === 'restart') {
-            const parent = this.parentScene;
-            this.scene.resume(parent.scene.key);
-            
-            parent.cameras.main.fadeOut(300, 10, 10, 26);
-            parent.cameras.main.once('camerafadeoutcomplete', () => {
-                parent.scene.restart({
-                    levelKey: (parent as any).levelKey,
-                    levelData: (parent as any).playtestLevelData,
-                    isTestMode: (parent as any).isTestMode,
-                    fromLobbyDoorId: (parent as any).fromLobbyDoorId
+        if (!this.inSettings) {
+            if (option.action === 'resume') {
+                this.isClosing = true;
+                this.resumeGame();
+            } else if (option.action === 'restart') {
+                this.isClosing = true;
+                const parent = this.parentScene;
+                this.scene.resume(parent.scene.key);
+                
+                parent.cameras.main.fadeOut(300, 10, 10, 26);
+                parent.cameras.main.once('camerafadeoutcomplete', () => {
+                    parent.scene.restart({
+                        levelKey: (parent as any).levelKey,
+                        levelData: (parent as any).playtestLevelData,
+                        isTestMode: (parent as any).isTestMode,
+                        fromLobbyDoorId: (parent as any).fromLobbyDoorId
+                    });
                 });
-            });
-            this.scene.stop();
-        } else if (option.action === 'exit') {
-            const parent = this.parentScene;
-            this.scene.resume(parent.scene.key);
-            
-            parent.cameras.main.fadeOut(300, 10, 10, 26);
-            parent.cameras.main.once('camerafadeoutcomplete', () => {
-                parent.scene.start('LevelSelectScene', {
-                    spawnDoorId: (parent as any).fromLobbyDoorId
+                this.scene.stop();
+            } else if (option.action === 'exit') {
+                this.isClosing = true;
+                const parent = this.parentScene;
+                this.scene.resume(parent.scene.key);
+                
+                parent.cameras.main.fadeOut(300, 10, 10, 26);
+                parent.cameras.main.once('camerafadeoutcomplete', () => {
+                    parent.scene.start('LevelSelectScene', {
+                        spawnDoorId: (parent as any).fromLobbyDoorId
+                    });
                 });
-            });
-            this.scene.stop();
+                this.scene.stop();
+            } else if (option.action === 'settings') {
+                this.inSettings = true;
+                this.selectedIndex = 0;
+                this.renderMenu();
+            }
+        } else {
+            // In settings submenu
+            if (option.action === 'back') {
+                this.inSettings = false;
+                this.selectedIndex = 3; // Highlight 'SETTINGS' option
+                this.renderMenu();
+            }
         }
     }
 
     private resumeGame(): void {
         this.isClosing = true;
-        this.sound.play('sfx_jump', { volume: 0.2, pitch: 0.8 } as any);
+        this.sound.play('sfx_jump', { volume: 0.17, pitch: 0.8 } as any);
         this.scene.resume(this.parentScene.scene.key);
         this.scene.stop();
     }

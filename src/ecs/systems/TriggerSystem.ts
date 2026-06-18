@@ -110,7 +110,12 @@ export class TriggerSystem {
                             inputManager.vibrate(player.playerIndex, 'weak', 100);
                             
                             if (sprite && sprite.scene) {
-                                sprite.scene.sound.play('sfx_pickup', { volume: 0.3 } as any);
+                                const soundKey = trigger.isActive ? 'sfx_switch_on' : 'sfx_switch_off';
+                                const config: Phaser.Types.Sound.SoundConfig = { volume: 0.3 };
+                                if (!trigger.isActive) {
+                                    config.seek = 0.05;
+                                }
+                                sprite.scene.sound.play(soundKey, config as any);
                             }
                         }
                     } else {
@@ -122,9 +127,28 @@ export class TriggerSystem {
                 }
             }
 
-            // Vibrate if button/pressure state changed
+            // Vibrate and play SFX if button/pressure state changed
             if (trigger.visualType === 'button' || trigger.triggerType === 'pressure') {
                 if (trigger.isActive !== prevActive) {
+                    if (sprite && sprite.scene) {
+                        const btnSound = sprite.scene.sound.add('sfx_button');
+                        if (trigger.isActive) {
+                            btnSound.play({ volume: 0.4, seek: 0.0 });
+                            sprite.scene.time.delayedCall(228, () => {
+                                if (btnSound && btnSound.isPlaying) {
+                                    btnSound.stop();
+                                }
+                                btnSound.destroy();
+                            });
+                        } else {
+                            btnSound.play({ volume: 0.4, seek: 0.0, rate: 0.8, detune: -300 });
+                            sprite.scene.time.delayedCall(300, () => {
+                                if (btnSound) {
+                                    btnSound.destroy();
+                                }
+                            });
+                        }
+                    }
                     if (trigger.isActive) {
                         for (const pi of overlappingPlayers) {
                             inputManager.vibrate(pi, 'weak', 100);
@@ -257,9 +281,6 @@ export class TriggerSystem {
             }
             if (sprite) {
                 sprite.setVisible(!isActive); // make gate invisible when open
-                if (sprite.scene) {
-                    sprite.scene.sound.play('sfx_door_open', { volume: 0.3 } as any);
-                }
 
                 // Render/Toggle glow if color is set
                 if (target.glowColor !== undefined) {

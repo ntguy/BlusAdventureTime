@@ -371,7 +371,7 @@ export class VictoryScene extends Phaser.Scene {
                     yoyo: true,
                     ease: 'Quad.easeOut',
                     onStart: () => {
-                        this.sound.play('sfx_jump', { volume: 0.2, pitch: 1.5 } as any);
+                        this.sound.play('sfx_jump', { volume: 0.17, pitch: 1.5 } as any);
                         this.blu.play('blu_bark', true);
                     },
                     onComplete: () => {
@@ -430,7 +430,7 @@ export class VictoryScene extends Phaser.Scene {
         if (idx === this.selectedIndex) return;
         this.selectedIndex = idx;
         this.updateMenuHighlight();
-        this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.4 } as any);
+        this.sound.play('sfx_jump', { volume: 0.085, pitch: 1.4 } as any);
     }
 
     private updateMenuHighlight(): void {
@@ -461,7 +461,7 @@ export class VictoryScene extends Phaser.Scene {
 
     private confirmSelection(): void {
         const option = this.menuOptions[this.selectedIndex];
-        this.sound.play('sfx_checkpoint', { volume: 0.4 });
+        this.sound.play('sfx_menu_select', { volume: 0.25 });
 
         if (option.action === 'credits') {
             this.showCreditsOverlay();
@@ -688,7 +688,7 @@ export class VictoryScene extends Phaser.Scene {
             closeText.setColor('#f4f1de');
         });
         closeText.on('pointerdown', () => {
-            this.sound.play('sfx_checkpoint', { volume: 0.4 });
+            this.sound.play('sfx_menu_select', { volume: 0.25 });
             this.closeCreditsOverlay();
         });
 
@@ -703,7 +703,7 @@ export class VictoryScene extends Phaser.Scene {
 
     private closeCreditsOverlay(): void {
         if (!this.creditsOpen) return;
-        this.sound.play('sfx_checkpoint', { volume: 0.4 });
+        this.sound.play('sfx_menu_select', { volume: 0.25 });
 
         this.creditsOverlay.destroy();
         this.creditsOpen = false;

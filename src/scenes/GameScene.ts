@@ -1,12 +1,13 @@
 import Phaser from 'phaser';
 import { InputManager, Action } from '../input/InputManager';
 import { AudioManager } from '../audio/AudioManager';
+import { MusicManager } from '../audio/MusicManager';
 import { TILE_SIZE } from '../constants';
 import { LEVEL_SELECT_MAPPINGS } from '../levels/levelSelectMapping';
 
 // ECS Architecture & Loader
 import { EntityManager, Entity } from '../ecs/Entity';
-import { PhysicsBodyComponent } from '../ecs/components';
+import { PhysicsBodyComponent, PlayerComponent } from '../ecs/components';
 import { LevelLoader } from '../levels/LevelLoader';
 import { LevelData } from '../levels/LevelSchema';
 import { MovementSystem } from '../ecs/systems/MovementSystem';
@@ -155,6 +156,9 @@ export class GameScene extends Phaser.Scene {
 
         // 13. Camera fade-in from dark overlay color
         this.cameras.main.fadeIn(300, 10, 10, 26);
+
+        // 14. Background music handling
+        MusicManager.getInstance().onLevelStart(this.levelKey, this);
     }
 
     update(time: number, delta: number): void {
@@ -281,13 +285,15 @@ export class GameScene extends Phaser.Scene {
     // ── Audio helpers ──
 
     private handleJumpSfx(): void {
+        const p1Comp = this.player1Entity.getComponent<PlayerComponent>('Player')!;
+        const p2Comp = this.player2Entity.getComponent<PlayerComponent>('Player')!;
         const p1Body = this.player1Entity.getComponent<PhysicsBodyComponent>('PhysicsBody')!;
         const p2Body = this.player2Entity.getComponent<PhysicsBodyComponent>('PhysicsBody')!;
 
-        if (p1Body.body.velocity.y < -0.5 && !this.player1WasAirborne && !p1Body.isGrounded) {
+        if (p1Body.body.velocity.y < -0.5 && !this.player1WasAirborne && !p1Body.isGrounded && !p1Comp.isClimbing) {
             this.audioManager.playJump();
         }
-        if (p2Body.body.velocity.y < -0.5 && !this.player2WasAirborne && !p2Body.isGrounded) {
+        if (p2Body.body.velocity.y < -0.5 && !this.player2WasAirborne && !p2Body.isGrounded && !p2Comp.isClimbing) {
             this.audioManager.playJump();
         }
     }
@@ -300,11 +306,11 @@ export class GameScene extends Phaser.Scene {
         const p2Grounded = p2Body.isGrounded;
 
         if (p1Grounded && this.player1WasAirborne) {
-            this.audioManager.playLand();
+            this.audioManager.playLand('human');
             this.inputManager.vibrate(0, 'weak', 100);
         }
         if (p2Grounded && this.player2WasAirborne) {
-            this.audioManager.playLand();
+            this.audioManager.playLand('dog');
             this.inputManager.vibrate(1, 'weak', 100);
         }
 

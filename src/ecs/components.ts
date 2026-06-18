@@ -36,6 +36,7 @@ export interface PlayerComponent extends Component {
     isDying?: boolean;
     dyingTimer?: number;
     airTime?: number;
+    ladderSound?: Phaser.Sound.BaseSound;
 }
 
 export interface TriggerComponent extends Component {

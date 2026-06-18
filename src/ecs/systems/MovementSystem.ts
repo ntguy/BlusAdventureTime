@@ -118,8 +118,21 @@ export class MovementSystem {
                         inputManager.vibrate(pi, 'weak', 150);
                         this.climbRumbleTimer[pi] = 100; // ms cooldown
                     }
+
+                    const scene = body.gameObject?.scene;
+                    if (scene) {
+                        if (!player.ladderSound) {
+                            player.ladderSound = scene.sound.add('sfx_ladder');
+                            player.ladderSound.play({ loop: true, volume: 0.315, rate: 1.2 });
+                        } else if (!player.ladderSound.isPlaying) {
+                            player.ladderSound.play({ loop: true, volume: 0.315, rate: 1.2 });
+                        }
+                    }
                 } else {
                     this.climbRumbleTimer[pi] = 0;
+                    if (player.ladderSound && player.ladderSound.isPlaying) {
+                        player.ladderSound.stop();
+                    }
                 }
 
                 // Jump off ladder
@@ -336,6 +349,12 @@ export class MovementSystem {
                     sprite.setFrame(13);
                 }
             }
+
+            if (!player.isClimbing) {
+                if (player.ladderSound && player.ladderSound.isPlaying) {
+                    player.ladderSound.stop();
+                }
+            }
         }
     }
 
@@ -365,9 +384,10 @@ export class MovementSystem {
         }
 
         // Play death SFX
-        scene.sound.play('sfx_death', { volume: 0.5 });
         if (player.playerType === 'dog') {
             scene.sound.play('sfx_grumble', { volume: 0.6 });
+        } else {
+            scene.sound.play('sfx_jdeath', { volume: 0.5, seek: 0.7, rate: 1.15, detune: 150 });
         }
 
         // Get the visual game object to tween its alpha
@@ -401,5 +421,8 @@ export class MovementSystem {
         body.allowGravity = true;
         body.setVelocity(0, 0);
         player.isDying = false;
+        if (player.ladderSound && player.ladderSound.isPlaying) {
+            player.ladderSound.stop();
+        }
     }
 }

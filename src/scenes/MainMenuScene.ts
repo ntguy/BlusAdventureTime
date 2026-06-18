@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../constants';
+import { MusicManager } from '../audio/MusicManager';
 
 export class MainMenuScene extends Phaser.Scene {
     private selectedIndex: number = 0;
@@ -18,6 +19,9 @@ export class MainMenuScene extends Phaser.Scene {
     create(): void {
         const width = GAME_WIDTH;
         const height = GAME_HEIGHT;
+
+        // Ensure background music stops/fades when entering Main Menu
+        MusicManager.getInstance().onMainMenuEnter();
 
         // Always use the snowy mountain background
         this.cameras.main.setBackgroundColor('#e9f1f6');
@@ -87,7 +91,7 @@ export class MainMenuScene extends Phaser.Scene {
         if (index === this.selectedIndex) return;
         this.selectedIndex = index;
         this.updateMenuHighlight();
-        this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.4 } as any);
+        this.sound.play('sfx_jump', { volume: 0.085, pitch: 1.4 } as any);
     }
 
     private updateMenuHighlight(): void {
@@ -106,7 +110,7 @@ export class MainMenuScene extends Phaser.Scene {
 
     private confirmSelection(): void {
         const option = this.menuOptions[this.selectedIndex];
-        this.sound.play('sfx_checkpoint', { volume: 0.4 });
+        this.sound.play('sfx_menu_select', { volume: 0.25 });
 
         this.cameras.main.fadeOut(300, 10, 10, 26);
         this.cameras.main.once('camerafadeoutcomplete', () => {

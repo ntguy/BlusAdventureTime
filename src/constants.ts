@@ -75,6 +75,14 @@ export const SFX = {
     checkpoint: 'sfx_checkpoint',
     death: 'sfx_death',
     bark: 'sfx_bark',
+    jdeath: 'sfx_jdeath',
+    button: 'sfx_button',
+    launcher: 'sfx_launcher',
+    menuSelect: 'sfx_menu_select',
+    switchOn: 'sfx_switch_on',
+    switchOff: 'sfx_switch_off',
+    unlock: 'sfx_unlock',
+    ladder: 'sfx_ladder',
 } as const;
 
 export const VISUAL_FAMILIES: Record<number, { active: number, inactive: number }> = {

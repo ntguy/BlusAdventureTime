@@ -1383,7 +1383,7 @@
       82,
       83,
       -1,
-      -1,
+      81,
       120,
       -1,
       -1,
@@ -2595,12 +2595,6 @@
       "properties": {}
     },
     {
-      "type": "cat",
-      "x": 8,
-      "y": 15,
-      "properties": {}
-    },
-    {
       "type": "gate",
       "x": 8,
       "y": 14,
@@ -2609,14 +2603,6 @@
         "tileGid": 355,
         "requireAll": false,
         "glowColor": "0xcca047"
-      }
-    },
-    {
-      "type": "sign",
-      "x": 5,
-      "y": 15,
-      "properties": {
-        "text": "J is deathly allergic to cats! Blu can bark to scare them away."
       }
     },
     {
@@ -3030,6 +3016,20 @@
       "properties": {
         "channel": "1",
         "glowColor": "0xf86b50"
+      }
+    },
+    {
+      "type": "cat",
+      "x": 7,
+      "y": 15,
+      "properties": {}
+    },
+    {
+      "type": "sign",
+      "x": 4,
+      "y": 15,
+      "properties": {
+        "text": "J is deathly allergic to cats! Blu can bark to scare them away."
       }
     }
   ]
