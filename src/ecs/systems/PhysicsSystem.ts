@@ -1,5 +1,6 @@
 import { EntityManager } from '../Entity';
 import { PhysicsBodyComponent, TransformComponent } from '../components';
+import { LEFT_SLOPES, RIGHT_SLOPES } from '../../constants';
 
 export class PhysicsSystem {
     update(entityManager: EntityManager, delta: number, terrainLayer?: Phaser.Tilemaps.TilemapLayer): void {
@@ -33,23 +34,20 @@ export class PhysicsSystem {
                 const tileX = Math.floor(feetX / 18);
                 const baseTileY = Math.floor(feetY / 18);
 
-                const leftSlopes = [248, 202, 244];
-                const rightSlopes = [251, 203, 247];
-
                 // Check rows baseTileY - 1, baseTileY, and baseTileY + 1 to find a slope tile the feet are touching
                 for (let dy = -1; dy <= 1; dy++) {
                     const ty = baseTileY + dy;
                     const tile = terrainLayer.getTileAt(tileX, ty);
 
-                    if (tile && (leftSlopes.includes(tile.index) || rightSlopes.includes(tile.index))) {
+                    if (tile && (LEFT_SLOPES.includes(tile.index) || RIGHT_SLOPES.includes(tile.index))) {
                         // Calculate relative X position within the tile (0 to 18)
                         const dx = Phaser.Math.Clamp(feetX - tile.pixelX, 0, 18);
                         
                         let targetY = tile.pixelY;
-                        if (leftSlopes.includes(tile.index)) {
+                        if (LEFT_SLOPES.includes(tile.index)) {
                             // Slopes up to the right: left side of roof
                             targetY = tile.pixelY + 18 - dx;
-                        } else if (rightSlopes.includes(tile.index)) {
+                        } else if (RIGHT_SLOPES.includes(tile.index)) {
                             // Slopes down to the right: right side of roof
                             targetY = tile.pixelY + dx;
                         }

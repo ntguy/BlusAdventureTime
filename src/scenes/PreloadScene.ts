@@ -87,6 +87,11 @@ export class PreloadScene extends Phaser.Scene {
         this.load.image('fallTrees_5', 'assets/backgrounds/fallTrees/Plan-5.png');
         this.load.image('fallTrees_6', 'assets/backgrounds/fallTrees/Plan-6.png');
 
+        // Load factory parallax layers
+        this.load.image('factory_1', 'assets/backgrounds/factory/1.png');
+        this.load.image('factory_2', 'assets/backgrounds/factory/2.png');
+        this.load.image('factory_3', 'assets/backgrounds/factory/3.png');
+
         // Load Blu real-life photo for victory credits
         this.load.image('bluRealPhoto', 'assets/sprites/bluRealPhoto.jpg');
 
@@ -170,7 +175,8 @@ export class PreloadScene extends Phaser.Scene {
         const bgKeys = [
             'grassyMountain_1', 'grassyMountain_2', 'grassyMountain_3', 'grassyMountain_4',
             'snowyMountain_1', 'snowyMountain_2', 'snowyMountain_3', 'snowyMountain_4', 'snowyMountain_5',
-            'fallTrees_1', 'fallTrees_2', 'fallTrees_3', 'fallTrees_4', 'fallTrees_5', 'fallTrees_6'
+            'fallTrees_1', 'fallTrees_2', 'fallTrees_3', 'fallTrees_4', 'fallTrees_5', 'fallTrees_6',
+            'factory_1', 'factory_2', 'factory_3'
         ];
 
         bgKeys.forEach(key => {
@@ -182,11 +188,19 @@ export class PreloadScene extends Phaser.Scene {
 
             const canvas = document.createElement('canvas');
             canvas.width = 1024;
-            const ctx = canvas.getContext('2d')!;
-            ctx.imageSmoothingEnabled = false;
-
             if (key === 'fallTrees_1') {
                 canvas.height = 1024;
+            } else {
+                canvas.height = 512;
+            }
+
+            const ctx = canvas.getContext('2d')!;
+            ctx.imageSmoothingEnabled = false;
+            (ctx as any).mozImageSmoothingEnabled = false;
+            (ctx as any).webkitImageSmoothingEnabled = false;
+            (ctx as any).msImageSmoothingEnabled = false;
+
+            if (key === 'fallTrees_1') {
                 ctx.drawImage(img, 0, 0, 1024, 512);
 
                 // Sample bottom-most pixel of the stretched image (at y = 511) to extend the grass color downwards
@@ -195,7 +209,6 @@ export class PreloadScene extends Phaser.Scene {
                 ctx.fillStyle = grassColor;
                 ctx.fillRect(0, 512, 1024, 512);
             } else {
-                canvas.height = 512;
                 ctx.drawImage(img, 0, 0, 1024, 512);
             }
 

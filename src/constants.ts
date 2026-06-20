@@ -90,3 +90,10 @@ export const VISUAL_FAMILIES: Record<number, { active: number, inactive: number 
     64: { active: 66, inactive: 64 },   // Lever
     107: { active: 108, inactive: 107 }, // Spring Launcher
 };
+
+// Slope tile codes configurations
+// Left slopes: go up and to the right
+export const LEFT_SLOPES = [248, 202, 244, 358, 372, 373, 390];
+// Right slopes: go down and to the right
+export const RIGHT_SLOPES = [251, 203, 247, 359, 374, 388, 389];
+

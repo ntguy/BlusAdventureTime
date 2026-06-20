@@ -226,16 +226,19 @@ export class LevelSelectScene extends Phaser.Scene {
             const halfWidth = camera.width / 2;
             const halfHeight = camera.height / 2;
 
-            const baseScale = 1.0;
-
-            const scaleX = (baseScale / zoom) * (576 / 1024);
-            const scaleY = (baseScale / zoom) * (324 / 512);
-
             this.backgroundSprites.forEach((sprite, index) => {
                 const scrollFactorX = xScrollFactors[index] || 0;
                 const scrollFactorY = yScrollFactors[index] || 0;
 
                 const bgKey = (sprite as any).bgKey || sprite.texture.key;
+
+                let baseScale = 1.0;
+                if (bgKey.startsWith('factory_')) {
+                    baseScale = 2.0;
+                }
+
+                const scaleX = (baseScale / zoom) * (576 / 1024);
+                const scaleY = (baseScale / zoom) * (324 / 512);
 
                 // Adjust tile scale to be constant in screen-space
                 sprite.tileScaleX = scaleX;

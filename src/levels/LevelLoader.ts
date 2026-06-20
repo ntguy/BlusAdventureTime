@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { TILE_SIZE, VISUAL_FAMILIES } from '../constants';
+import { TILE_SIZE, VISUAL_FAMILIES, LEFT_SLOPES, RIGHT_SLOPES } from '../constants';
 import { LevelData, EntityData } from './LevelSchema';
 import { EntityManager, Entity } from '../ecs/Entity';
 import { createPlayerEntity } from '../entities/PlayerFactory';
@@ -493,8 +493,14 @@ export class LevelLoader {
                 body.setSize(12, 12);
                 body.setOffset(6, 6);
 
-                // Add collision with terrain
-                scene.physics.add.collider(sprite, terrainLayer);
+                // Add collision with terrain, ignoring slopes so flying enemies can fly through them
+                scene.physics.add.collider(sprite, terrainLayer, undefined, (spriteObj: any, tileObj: any) => {
+                    const idx = tileObj.index;
+                    if (LEFT_SLOPES.includes(idx) || RIGHT_SLOPES.includes(idx)) {
+                        return false;
+                    }
+                    return true;
+                });
 
                 const entity = entityManager.createEntity();
                 entity.addComponent({ type: 'Transform', x: sprite.x, y: sprite.y, width: 18, height: 18 } as TransformComponent);
@@ -909,7 +915,7 @@ export class LevelLoader {
         // 8. Bind Physics Colliders
         const slopeProcessCallback = (obj: any, tile: any) => {
             const idx = tile.index;
-            if (idx === 248 || idx === 202 || idx === 244 || idx === 251 || idx === 203 || idx === 247) {
+            if (LEFT_SLOPES.includes(idx) || RIGHT_SLOPES.includes(idx)) {
                 return false;
             }
             return true;
@@ -1226,6 +1232,7 @@ export class LevelLoader {
                     layer.key
                 );
 
+                (tileSprite as any).bgKey = layer.key;
                 tileSprite.tileScaleX = baseScale * (576 / 1024);
                 tileSprite.tileScaleY = baseScale * (324 / 512);
                 tileSprite.setScrollFactor(0, 0);
@@ -1274,6 +1281,7 @@ export class LevelLoader {
                     layer.key
                 );
 
+                (tileSprite as any).bgKey = layer.key;
                 tileSprite.tileScaleX = baseScale * (576 / 1024);
                 tileSprite.tileScaleY = baseScale * (324 / 512);
                 tileSprite.setScrollFactor(0, 0);
@@ -1340,6 +1348,53 @@ export class LevelLoader {
                 tileSprite.tileScaleY = scaleY;
                 tileSprite.setScrollFactor(0, 0);
                 tileSprite.setDepth(-10 + index); // behind map layers (-10 to -5)
+
+                if (group) {
+                    group.add(tileSprite);
+                }
+                if (uiCamera) {
+                    uiCamera.ignore(tileSprite);
+                }
+                sprites.push(tileSprite);
+            });
+        } else if (preset === 'factory') {
+            scene.cameras.main.setBackgroundColor('#627dae');
+            const layers = [
+                { key: 'factory_1', scrollFactorX: 0.05, scrollFactorY: 0.02 },
+                { key: 'factory_2', scrollFactorX: 0.4, scrollFactorY: 0.05 },
+                { key: 'factory_3', scrollFactorX: 0.8, scrollFactorY: 0.1 }
+            ];
+
+            const extraWidth = 2000; // Buffer to prevent seeing background edges
+            const vh = 279; // standard viewport height at 2.0X zoom
+
+            layers.forEach((layer, index) => {
+                // Ensure texture uses NEAREST filtering for pixel-perfect sharpness
+                const tex = scene.textures.get(layer.key);
+                if (tex) {
+                    tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+                }
+
+                const baseScale = 1;
+                const renderedHeight = 324 * baseScale;
+                const bgHeight = 512;
+                // Calculate y coordinate to ensure background covers viewport at all camera positions
+                const maxScrollY = Math.max(0, levelHeightPx - vh);
+                const bgY = vh - renderedHeight / 2 + maxScrollY * layer.scrollFactorY;
+
+                const tileSprite = scene.add.tileSprite(
+                    levelWidthPx / 2,
+                    bgY,
+                    levelWidthPx + extraWidth,
+                    bgHeight,
+                    layer.key
+                );
+
+                (tileSprite as any).bgKey = layer.key;
+                tileSprite.tileScaleX = baseScale * (576 / 1024);
+                tileSprite.tileScaleY = baseScale * (324 / 512);
+                tileSprite.setScrollFactor(0, 0);
+                tileSprite.setDepth(-10 + index); // behind map layers (-10 to -7)
 
                 if (group) {
                     group.add(tileSprite);

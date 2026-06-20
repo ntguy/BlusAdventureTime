@@ -215,16 +215,19 @@ export class EditorScene extends Phaser.Scene {
             const halfWidth = camera.width / 2;
             const halfHeight = camera.height / 2;
 
-            const baseScale = 1.0;
-
-            const scaleX = (baseScale / zoom) * (576 / 1024);
-            const scaleY = (baseScale / zoom) * (324 / 512);
-
             this.backgroundSprites.forEach((sprite, index) => {
                 const scrollFactorX = xScrollFactors[index] || 0;
                 const scrollFactorY = yScrollFactors[index] || 0;
 
                 const bgKey = (sprite as any).bgKey || sprite.texture.key;
+
+                let baseScale = 1.0;
+                if (bgKey.startsWith('factory_')) {
+                    baseScale = 2.0;
+                }
+
+                const scaleX = (baseScale / zoom) * (576 / 1024);
+                const scaleY = (baseScale / zoom) * (324 / 512);
 
                 // Adjust tile scale to be constant in screen-space
                 sprite.tileScaleX = scaleX;
@@ -1919,7 +1922,7 @@ export class EditorScene extends Phaser.Scene {
             // HTML Form Dialog
             this.showPropertyForm("Level Properties", [
                 { key: 'name', label: 'Level Name', type: 'text', value: String(this.levelData.meta.name || "level") },
-                { key: 'background', label: 'Background Preset', type: 'select', options: ['None', 'grassyMountain', 'snowyMountain', 'fallTrees'], value: String(this.levelData.meta.background || "None") },
+                { key: 'background', label: 'Background Preset', type: 'select', options: ['None', 'grassyMountain', 'snowyMountain', 'fallTrees', 'factory'], value: String(this.levelData.meta.background || "None") },
                 { key: 'offsetY', label: 'Background Y Offset (px)', type: 'text', value: String(this.levelData.meta.backgroundOffsetY || "0") }
             ], (values) => {
                 const cleanName = values.name.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -2900,6 +2903,7 @@ export class EditorScene extends Phaser.Scene {
             const allTiles: number[] = [];
             for (let i = 0; i <= 179; i++) allTiles.push(i);
             for (let i = 180; i <= 291; i++) allTiles.push(i);
+            for (let i = 292; i <= 403; i++) allTiles.push(i);
 
             allTiles.forEach(gid => {
                 const isTagged = taggedGids.includes(gid);
@@ -2922,7 +2926,12 @@ export class EditorScene extends Phaser.Scene {
                 let bgPos: string;
                 let bgImg: string;
 
-                if (gid >= 180) {
+                if (gid >= 292) {
+                    col = (gid - 292) % 16;
+                    rowNum = Math.floor((gid - 292) / 16);
+                    bgSize = '576px 252px';
+                    bgImg = 'assets/tilesets/tilemap_packed_industrial.png';
+                } else if (gid >= 180) {
                     col = (gid - 180) % 16;
                     rowNum = Math.floor((gid - 180) / 16);
                     bgSize = '576px 252px';
