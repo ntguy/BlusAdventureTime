@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../constants';
 import { MusicManager } from '../audio/MusicManager';
+import { BackgroundEffectsManager } from '../levels/BackgroundEffectsManager';
 
 export class MainMenuScene extends Phaser.Scene {
     private selectedIndex: number = 0;
@@ -11,6 +12,7 @@ export class MainMenuScene extends Phaser.Scene {
 
     private optionTextObjects: Phaser.GameObjects.Text[] = [];
     private titleText!: Phaser.GameObjects.Text;
+    private backgroundEffectsManager?: BackgroundEffectsManager;
 
     constructor() {
         super({ key: 'MainMenuScene' });
@@ -31,6 +33,15 @@ export class MainMenuScene extends Phaser.Scene {
             if (tex) tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
             const img = this.add.image(width / 2, height / 2, key);
             img.setDisplaySize(width, height);
+        });
+
+        // Initialize background effects for snowyMountain on the Main Menu
+        this.backgroundEffectsManager = new BackgroundEffectsManager(this, 'snowyMountain');
+        this.events.once('shutdown', () => {
+            if (this.backgroundEffectsManager) {
+                this.backgroundEffectsManager.destroy();
+                this.backgroundEffectsManager = undefined;
+            }
         });
 
         // Dark overlay
@@ -192,4 +203,9 @@ export class MainMenuScene extends Phaser.Scene {
         });
     }
 
+    update(time: number, delta: number): void {
+        if (this.backgroundEffectsManager) {
+            this.backgroundEffectsManager.update(time, delta);
+        }
+    }
 }

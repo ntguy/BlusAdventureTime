@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { TILE_SIZE } from '../constants';
+import { BackgroundEffectsManager } from '../levels/BackgroundEffectsManager';
 
 // ECS Architecture & Loader
 import { EntityManager, Entity } from '../ecs/Entity';
@@ -53,6 +54,7 @@ export class LevelSelectScene extends Phaser.Scene {
     private backgroundSprites?: Phaser.GameObjects.TileSprite[];
     private backgroundOffsetY: number = 0;
     private terrainLayer!: Phaser.Tilemaps.TilemapLayer;
+    private backgroundEffectsManager?: BackgroundEffectsManager;
 
     constructor() {
         super({ key: 'LevelSelectScene' });
@@ -80,6 +82,16 @@ export class LevelSelectScene extends Phaser.Scene {
         this.backgroundOffsetY = levelData?.meta?.backgroundOffsetY || 0;
         this.player1Entity = player1Entity;
         this.player2Entity = player2Entity;
+
+        if (levelData?.meta?.background) {
+            this.backgroundEffectsManager = new BackgroundEffectsManager(this, levelData.meta.background);
+            this.events.once('shutdown', () => {
+                if (this.backgroundEffectsManager) {
+                    this.backgroundEffectsManager.destroy();
+                    this.backgroundEffectsManager = undefined;
+                }
+            });
+        }
 
         // 3. If returning from a level, spawn both players at the corresponding door position
         if (data?.spawnDoorId) {
@@ -268,6 +280,10 @@ export class LevelSelectScene extends Phaser.Scene {
                     sprite.y = bgY;
                 }
             });
+        }
+
+        if (this.backgroundEffectsManager) {
+            this.backgroundEffectsManager.update(time, delta);
         }
     }
 

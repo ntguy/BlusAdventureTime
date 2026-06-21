@@ -4,6 +4,7 @@ import { AudioManager } from '../audio/AudioManager';
 import { MusicManager } from '../audio/MusicManager';
 import { TILE_SIZE } from '../constants';
 import { LEVEL_SELECT_MAPPINGS } from '../levels/levelSelectMapping';
+import { BackgroundEffectsManager } from '../levels/BackgroundEffectsManager';
 
 // ECS Architecture & Loader
 import { EntityManager, Entity } from '../ecs/Entity';
@@ -60,6 +61,7 @@ export class GameScene extends Phaser.Scene {
     private isTestMode: boolean = false;
     private playtestLevelData: any = null;
     private backgroundSprites?: Phaser.GameObjects.TileSprite[];
+    private backgroundEffectsManager?: BackgroundEffectsManager;
     private backgroundOffsetY: number = 0;
     private fromLobbyDoorId: number = 0;
     private terrainLayer!: Phaser.Tilemaps.TilemapLayer;
@@ -94,6 +96,16 @@ export class GameScene extends Phaser.Scene {
         );
         this.backgroundSprites = backgroundSprites;
         this.terrainLayer = terrainLayer;
+
+        if (levelData?.meta?.background) {
+            this.backgroundEffectsManager = new BackgroundEffectsManager(this, levelData.meta.background);
+            this.events.once('shutdown', () => {
+                if (this.backgroundEffectsManager) {
+                    this.backgroundEffectsManager.destroy();
+                    this.backgroundEffectsManager = undefined;
+                }
+            });
+        }
 
         this.player1Entity = player1Entity;
         this.player2Entity = player2Entity;
@@ -268,6 +280,10 @@ export class GameScene extends Phaser.Scene {
                     sprite.y = bgY;
                 }
             });
+        }
+
+        if (this.backgroundEffectsManager) {
+            this.backgroundEffectsManager.update(time, delta);
         }
 
         // FPS

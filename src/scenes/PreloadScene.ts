@@ -271,6 +271,127 @@ export class PreloadScene extends Phaser.Scene {
             repeat: -1
         });
 
+        // Create custom dynamic textures for weather particles
+        this.createParticleTextures();
+
         this.scene.start('MainMenuScene');
+    }
+
+    private createParticleTextures(): void {
+        // 1. Snowflakes (3 sizes: small 1x1, medium 2x2, large 3x3)
+        // small snowflake: 1x1 white pixel
+        let canvas = document.createElement('canvas');
+        canvas.width = 1;
+        canvas.height = 1;
+        let ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 1, 1);
+        this.textures.addCanvas('snowflake_small', canvas);
+
+        // medium snowflake: 2x2 white square
+        canvas = document.createElement('canvas');
+        canvas.width = 2;
+        canvas.height = 2;
+        ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 2, 2);
+        this.textures.addCanvas('snowflake_medium', canvas);
+
+        // large snowflake: 3x3 white cross/diamond
+        canvas = document.createElement('canvas');
+        canvas.width = 3;
+        canvas.height = 3;
+        ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(1, 0, 1, 3);
+        ctx.fillRect(0, 1, 3, 1);
+        this.textures.addCanvas('snowflake_large', canvas);
+
+        // 2. Autumn Leaves (orange, red, yellow)
+        // 4x5 leaf shape (smaller & diagonal leaf outline)
+        // Color 1: Orange
+        canvas = document.createElement('canvas');
+        canvas.width = 4;
+        canvas.height = 5;
+        ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#d97706';
+        ctx.fillRect(1, 0, 1, 1);
+        ctx.fillRect(0, 1, 3, 1);
+        ctx.fillRect(0, 2, 4, 1);
+        ctx.fillRect(1, 3, 3, 1);
+        ctx.fillRect(2, 4, 1, 1);
+        this.textures.addCanvas('leaf_orange', canvas);
+
+        // Color 2: Red
+        canvas = document.createElement('canvas');
+        canvas.width = 4;
+        canvas.height = 5;
+        ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#b91c1c';
+        ctx.fillRect(1, 0, 1, 1);
+        ctx.fillRect(0, 1, 3, 1);
+        ctx.fillRect(0, 2, 4, 1);
+        ctx.fillRect(1, 3, 3, 1);
+        ctx.fillRect(2, 4, 1, 1);
+        this.textures.addCanvas('leaf_red', canvas);
+
+        // Color 3: Yellow
+        canvas = document.createElement('canvas');
+        canvas.width = 4;
+        canvas.height = 5;
+        ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#eab308';
+        ctx.fillRect(1, 0, 1, 1);
+        ctx.fillRect(0, 1, 3, 1);
+        ctx.fillRect(0, 2, 4, 1);
+        ctx.fillRect(1, 3, 3, 1);
+        ctx.fillRect(2, 4, 1, 1);
+        this.textures.addCanvas('leaf_yellow', canvas);
+
+        // 3. Twinkling Stars (1x1 single tiny point of light)
+        canvas = document.createElement('canvas');
+        canvas.width = 1;
+        canvas.height = 1;
+        ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#fffef0';
+        ctx.fillRect(0, 0, 1, 1);
+        this.textures.addCanvas('star_twinkle', canvas);
+
+        // 4. Fluttering Butterflies (blue and yellow)
+        // Blue Butterfly (4x3 canvas)
+        canvas = document.createElement('canvas');
+        canvas.width = 4;
+        canvas.height = 3;
+        ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#3b82f6'; // vibrant blue wings
+        ctx.fillRect(0, 0, 1, 2);
+        ctx.fillRect(3, 0, 1, 2);
+        ctx.fillStyle = '#1e3a8a'; // dark blue body
+        ctx.fillRect(1, 1, 2, 2);
+        this.textures.addCanvas('butterfly_blue', canvas);
+
+        // Yellow Butterfly (4x3 canvas)
+        canvas = document.createElement('canvas');
+        canvas.width = 4;
+        canvas.height = 3;
+        ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#facc15'; // yellow wings
+        ctx.fillRect(0, 0, 1, 2);
+        ctx.fillRect(3, 0, 1, 2);
+        ctx.fillStyle = '#713f12'; // brown body
+        ctx.fillRect(1, 1, 2, 2);
+        this.textures.addCanvas('butterfly_yellow', canvas);
+
+        // Red Butterfly (4x3 canvas)
+        canvas = document.createElement('canvas');
+        canvas.width = 4;
+        canvas.height = 3;
+        ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#ef4444'; // vibrant red wings
+        ctx.fillRect(0, 0, 1, 2);
+        ctx.fillRect(3, 0, 1, 2);
+        ctx.fillStyle = '#7f1d1d'; // dark red body
+        ctx.fillRect(1, 1, 2, 2);
+        this.textures.addCanvas('butterfly_red', canvas);
     }
 }
