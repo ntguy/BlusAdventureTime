@@ -389,6 +389,56 @@ export class EditorScene extends Phaser.Scene {
         this.gridGraphics.strokeRect(0, 0, w, h);
     }
 
+    private refreshEntityVisuals(): void {
+        this.entityVisuals.forEach(v => v.destroy());
+        this.entityVisuals.clear();
+        this.levelData.entities.forEach(ent => this.drawEntityVisual(ent));
+    }
+
+    private syncSelectedEntityFromSelection(): void {
+        if (this.activeTool !== 'move') return;
+
+        const entityItems = this.selectedWorkspaceItems.filter(item => item.type === 'entity');
+        
+        let shouldClear = true;
+        if (this.selectedWorkspaceItems.length > 0 && entityItems.length === this.selectedWorkspaceItems.length) {
+            const firstType = entityItems[0].value.type;
+            const allSameType = entityItems.every(item => item.value.type === firstType);
+            if (allSameType) {
+                this.selectedEntity = entityItems[0].value;
+                shouldClear = false;
+            }
+        }
+        
+        if (shouldClear) {
+            if (this.selectedWorkspaceItems.length > 0 || !this.isDragging) {
+                this.selectedEntity = null;
+            }
+        }
+
+        this.updateSelectedEntityUI();
+    }
+
+    private applyProperties(ent: EntityData, newProperties: any): void {
+        ent.properties = newProperties;
+
+        const entityItems = this.selectedWorkspaceItems.filter(item => item.type === 'entity');
+        if (entityItems.length > 1) {
+            const firstType = entityItems[0].value.type;
+            const allSameType = entityItems.every(item => item.value.type === firstType);
+            if (allSameType) {
+                for (const item of entityItems) {
+                    item.value.properties = JSON.parse(JSON.stringify(newProperties));
+                }
+            }
+        }
+
+        this.sound.play('sfx_checkpoint', { volume: 0.3 });
+        this.updateSelectedEntityUI();
+        this.createWorkspaceTilemap();
+        this.refreshEntityVisuals();
+    }
+
     private drawEntityVisual(ent: EntityData): void {
         const key = `${ent.x},${ent.y}`;
         const labels: Record<string, { t: string, c: string }> = {
@@ -433,6 +483,9 @@ export class EditorScene extends Phaser.Scene {
         } else if (ent.type === 'ladder') {
             const tileGid = props.tileGid !== undefined ? props.tileGid : 71;
             labelText = `LD${tileGid}`;
+        } else if (ent.type === 'spikes') {
+            const rotate180 = props.rotate180 === true || props.rotate180 === 'true';
+            labelText = rotate180 ? 'SP▼' : 'SP▲';
         }
 
         const txt = this.add.text(ent.x * TILE_SIZE + TILE_SIZE / 2, ent.y * TILE_SIZE + TILE_SIZE / 2, labelText, {
@@ -995,6 +1048,8 @@ export class EditorScene extends Phaser.Scene {
         this.activeTool = tool;
         if (tool !== 'move') {
             this.selectedWorkspaceItems = [];
+            this.selectedEntity = null;
+            this.updateSelectedEntityUI();
             this.drawSelectionHighlights();
         }
         this.updateSelectionHighlights();
@@ -1333,18 +1388,28 @@ export class EditorScene extends Phaser.Scene {
         const name = ent.type.toUpperCase();
         const props = ent.properties || {};
 
+        const entityItems = this.selectedWorkspaceItems.filter(item => item.type === 'entity');
+        let prefix = "Selected: ";
+        if (entityItems.length > 1) {
+            const firstType = entityItems[0].value.type;
+            const allSameType = entityItems.every(item => item.value.type === firstType);
+            if (allSameType) {
+                prefix = `[MULTI-EDIT: ${entityItems.length}] SELECTED: `;
+            }
+        }
+
         if (ent.type === 'button') {
             const ch = props.channel || '1';
             const lCh = props.listenChannel ? `\nListen: ${props.listenChannel}` : '';
             const glow = props.glowColor ? `\nGlow: ${props.glowColor}` : '';
-            this.selectedEntityText.setText(`Selected: ${name}\nChannel: ${ch}${lCh}${glow}`);
+            this.selectedEntityText.setText(`${prefix}${name}\nChannel: ${ch}${lCh}${glow}`);
             this.selectedEntityText.setColor('#ff5555');
             this.editPropsButton.setVisible(true);
         } else if (ent.type === 'lever') {
             const ch = props.channel || '1';
             const lCh = props.listenChannel ? `\nListen: ${props.listenChannel}` : '';
             const glow = props.glowColor ? `\nGlow: ${props.glowColor}` : '';
-            this.selectedEntityText.setText(`Selected: ${name}\nChannel: ${ch}${lCh}${glow}`);
+            this.selectedEntityText.setText(`${prefix}${name}\nChannel: ${ch}${lCh}${glow}`);
             this.selectedEntityText.setColor('#ff33aa');
             this.editPropsButton.setVisible(true);
         } else if (ent.type === 'flying') {
@@ -1354,19 +1419,19 @@ export class EditorScene extends Phaser.Scene {
             const vel = props.velocity || 60;
             const endXDisp = (endX >= 0 ? '+' : '') + endX;
             const endYDisp = (endY >= 0 ? '+' : '') + endY;
-            this.selectedEntityText.setText(`Selected: ${name}\nStyle: ${style}\nEndOffset: ${endXDisp},${endYDisp}\nVel: ${vel}`);
+            this.selectedEntityText.setText(`${prefix}${name}\nStyle: ${style}\nEndOffset: ${endXDisp},${endYDisp}\nVel: ${vel}`);
             this.selectedEntityText.setColor('#a233ff');
             this.editPropsButton.setVisible(true);
         } else if (ent.type === 'gate') {
             const lCh = props.listenChannel || '1';
             const tileGid = props.tileGid !== undefined ? props.tileGid : 355;
             const glow = props.glowColor ? `\nGlow: ${props.glowColor}` : '';
-            this.selectedEntityText.setText(`Selected: ${name}\nListen Ch: ${lCh}\nTile GID: ${tileGid}${glow}`);
+            this.selectedEntityText.setText(`${prefix}${name}\nListen Ch: ${lCh}\nTile GID: ${tileGid}${glow}`);
             this.selectedEntityText.setColor('#ffaa00');
             this.editPropsButton.setVisible(true);
         } else if (ent.type === 'sign') {
             const txt = props.text !== undefined ? props.text : "Hello!";
-            this.selectedEntityText.setText(`Selected: ${name}\nText: "${txt}"`);
+            this.selectedEntityText.setText(`${prefix}${name}\nText: "${txt}"`);
             this.selectedEntityText.setColor('#e2a76f');
             this.editPropsButton.setVisible(true);
         } else if (ent.type === 'movingPlatform') {
@@ -1378,22 +1443,27 @@ export class EditorScene extends Phaser.Scene {
             const carry = props.carryEntities !== 'false';
             const endXDisp = (endX >= 0 ? '+' : '') + endX;
             const endYDisp = (endY >= 0 ? '+' : '') + endY;
-            this.selectedEntityText.setText(`Selected: ${name}\nCh: ${ch} | Offset: ${endXDisp},${endYDisp}\nVel: ${vel} | Glow: ${glow}\nCarry: ${carry}`);
+            this.selectedEntityText.setText(`${prefix}${name}\nCh: ${ch} | Offset: ${endXDisp},${endYDisp}\nVel: ${vel} | Glow: ${glow}\nCarry: ${carry}`);
             this.selectedEntityText.setColor('#44aaff');
             this.editPropsButton.setVisible(true);
         } else if (ent.type === 'levelDoor') {
             const doorId = props.doorId !== undefined ? props.doorId : 1;
             const label = props.label !== undefined ? props.label : `LEVEL ${doorId}`;
-            this.selectedEntityText.setText(`Selected: ${name}\nDoor ID: ${doorId}\nLabel: "${label}"`);
+            this.selectedEntityText.setText(`${prefix}${name}\nDoor ID: ${doorId}\nLabel: "${label}"`);
             this.selectedEntityText.setColor('#33ff99');
             this.editPropsButton.setVisible(true);
         } else if (ent.type === 'ladder') {
             const tileGid = props.tileGid !== undefined ? props.tileGid : 71;
-            this.selectedEntityText.setText(`Selected: ${name}\nTile GID: ${tileGid}`);
+            this.selectedEntityText.setText(`${prefix}${name}\nTile GID: ${tileGid}`);
             this.selectedEntityText.setColor('#a8a8a8');
             this.editPropsButton.setVisible(true);
+        } else if (ent.type === 'spikes') {
+            const rotate180 = props.rotate180 === true || props.rotate180 === 'true';
+            this.selectedEntityText.setText(`${prefix}${name}\nUpside Down (180°): ${rotate180}`);
+            this.selectedEntityText.setColor('#ff3333');
+            this.editPropsButton.setVisible(true);
         } else {
-            this.selectedEntityText.setText(`Selected: ${name}\n(No editable properties)`);
+            this.selectedEntityText.setText(`${prefix}${name}\n(No editable properties)`);
             this.selectedEntityText.setColor('#ffffff');
             this.editPropsButton.setVisible(false);
         }
@@ -1419,15 +1489,11 @@ export class EditorScene extends Phaser.Scene {
                 const glowColor = prompt("Enter Glow Color (hex, e.g. 0xff5500, or leave empty):", String(props.glowColor || ""));
                 if (glowColor === null) return;
 
-                ent.properties = {
+                this.applyProperties(ent, {
                     channel: ch.trim() || "1",
                     listenChannel: lCh.trim() ? lCh.trim() : undefined,
                     glowColor: glowColor.trim() ? glowColor.trim() : undefined
-                };
-
-                this.sound.play('sfx_checkpoint', { volume: 0.3 });
-                this.updateSelectedEntityUI();
-                this.createWorkspaceTilemap();
+                });
             } else if (ent.type === 'lever') {
                 const ch = prompt("Enter Output Trigger Channel (e.g. 1, gate_a):", String(props.channel || "1"));
                 if (ch === null) return;
@@ -1438,15 +1504,11 @@ export class EditorScene extends Phaser.Scene {
                 const glowColor = prompt("Enter Glow Color (hex, e.g. 0xff5500, or leave empty):", String(props.glowColor || ""));
                 if (glowColor === null) return;
 
-                ent.properties = {
+                this.applyProperties(ent, {
                     channel: ch.trim() || "1",
                     listenChannel: lCh.trim() ? lCh.trim() : undefined,
                     glowColor: glowColor.trim() ? glowColor.trim() : undefined
-                };
-
-                this.sound.play('sfx_checkpoint', { volume: 0.3 });
-                this.updateSelectedEntityUI();
-                this.createWorkspaceTilemap();
+                });
             } else if (ent.type === 'flying') {
                 const startFrame = prompt("Enter Start Frame Index (for 3-frame anim):", String(props.startFrame !== undefined ? props.startFrame : 120));
                 if (startFrame === null) return;
@@ -1460,16 +1522,12 @@ export class EditorScene extends Phaser.Scene {
                 const parsedEndX = parseInt(endX.trim());
                 const parsedEndY = parseInt(endY.trim());
 
-                ent.properties = {
+                this.applyProperties(ent, {
                     startFrame: parseInt(startFrame.trim()) || 120,
                     endX: isNaN(parsedEndX) ? 0 : parsedEndX,
                     endY: isNaN(parsedEndY) ? 0 : parsedEndY,
                     velocity: parseInt(velocity.trim()) || 60
-                };
-
-                this.sound.play('sfx_checkpoint', { volume: 0.3 });
-                this.updateSelectedEntityUI();
-                this.createWorkspaceTilemap();
+                });
             } else if (ent.type === 'gate') {
                 const lCh = prompt("Enter Listen Channel (e.g. 1, gate_a):", String(props.listenChannel || "1"));
                 if (lCh === null) return;
@@ -1478,26 +1536,18 @@ export class EditorScene extends Phaser.Scene {
                 const glowColor = prompt("Enter Glow Color (hex, e.g. 0xff5500, or leave empty):", String(props.glowColor || ""));
                 if (glowColor === null) return;
 
-                ent.properties = {
+                this.applyProperties(ent, {
                     listenChannel: lCh.trim() || "1",
                     tileGid: parseInt(tileGid.trim()) || 355,
                     glowColor: glowColor.trim() ? glowColor.trim() : undefined
-                };
-
-                this.sound.play('sfx_checkpoint', { volume: 0.3 });
-                this.updateSelectedEntityUI();
-                this.createWorkspaceTilemap();
+                });
             } else if (ent.type === 'sign') {
                 const txt = prompt("Enter Sign Text:", String(props.text !== undefined ? props.text : "Hello!"));
                 if (txt === null) return;
 
-                ent.properties = {
+                this.applyProperties(ent, {
                     text: txt.trim()
-                };
-
-                this.sound.play('sfx_checkpoint', { volume: 0.3 });
-                this.updateSelectedEntityUI();
-                this.createWorkspaceTilemap();
+                });
             } else if (ent.type === 'movingPlatform') {
                 const endX = prompt("Enter Relative End Tile X Offset:", String(props.endX !== undefined ? props.endX : "0"));
                 if (endX === null) return;
@@ -1520,7 +1570,7 @@ export class EditorScene extends Phaser.Scene {
                 const parsedEndY = parseInt(endY.trim());
                 const parsedTileGid = parseInt(tileGid.trim());
 
-                ent.properties = {
+                this.applyProperties(ent, {
                     endX: isNaN(parsedEndX) ? 0 : parsedEndX,
                     endY: isNaN(parsedEndY) ? 0 : parsedEndY,
                     velocity: parseInt(velocity.trim()) || 60,
@@ -1529,48 +1579,39 @@ export class EditorScene extends Phaser.Scene {
                     extraTiles: extraTiles.trim() || undefined,
                     carryEntities: carryEntities.trim() || "true",
                     glowColor: glowColor.trim() || "0x44aaff"
-                };
-
-                this.sound.play('sfx_checkpoint', { volume: 0.3 });
-                this.updateSelectedEntityUI();
-                this.createWorkspaceTilemap();
+                });
             } else if (ent.type === 'cat') {
                 const facing = prompt("Enter Initial Facing Direction (left/right):", String(props.facing || "right"));
                 if (facing === null) return;
 
                 const facingVal = facing.trim().toLowerCase();
-                ent.properties = {
+                this.applyProperties(ent, {
                     facing: facingVal === 'left' ? 'left' : 'right'
-                };
-
-                this.sound.play('sfx_checkpoint', { volume: 0.3 });
-                this.updateSelectedEntityUI();
-                this.createWorkspaceTilemap();
+                });
             } else if (ent.type === 'levelDoor') {
                 const doorId = prompt("Enter Door ID (matches mapping, e.g. 1):", String(props.doorId !== undefined ? props.doorId : "1"));
                 if (doorId === null) return;
                 const label = prompt("Enter Door Display Name (e.g. LEVEL 1):", String(props.label !== undefined ? props.label : `LEVEL ${doorId}`));
                 if (label === null) return;
 
-                ent.properties = {
+                this.applyProperties(ent, {
                     doorId: parseInt(doorId.trim()) || 1,
                     label: label.trim()
-                };
-
-                this.sound.play('sfx_checkpoint', { volume: 0.3 });
-                this.updateSelectedEntityUI();
-                this.createWorkspaceTilemap();
+                });
             } else if (ent.type === 'ladder') {
                 const tileGid = prompt("Enter Ladder Tile GID (default 71):", String(props.tileGid !== undefined ? props.tileGid : "71"));
                 if (tileGid === null) return;
 
-                ent.properties = {
+                this.applyProperties(ent, {
                     tileGid: parseInt(tileGid.trim()) || 71
-                };
+                });
+            } else if (ent.type === 'spikes') {
+                const rotate180 = prompt("Rotate 180 degrees (upside down)? (true/false):", String(props.rotate180 !== undefined ? props.rotate180 : "false"));
+                if (rotate180 === null) return;
 
-                this.sound.play('sfx_checkpoint', { volume: 0.3 });
-                this.updateSelectedEntityUI();
-                this.createWorkspaceTilemap();
+                this.applyProperties(ent, {
+                    rotate180: rotate180.trim().toLowerCase() === 'true'
+                });
             }
         } else {
             // UNIFIED FORM SYSTEM FOR REAL PLAYERS
@@ -1580,14 +1621,11 @@ export class EditorScene extends Phaser.Scene {
                     { key: 'listenChannel', label: 'Listen Channel (Optional)', type: 'text', value: String(props.listenChannel || "") },
                     { key: 'glowColor', label: 'Glow Color (hex, e.g. 0xff5500, or leave empty)', type: 'text', value: String(props.glowColor || "") }
                 ], (values) => {
-                    ent.properties = {
+                    this.applyProperties(ent, {
                         channel: values.channel.trim() || "1",
                         listenChannel: values.listenChannel.trim() ? values.listenChannel.trim() : undefined,
                         glowColor: values.glowColor.trim() ? values.glowColor.trim() : undefined
-                    };
-                    this.sound.play('sfx_checkpoint', { volume: 0.3 });
-                    this.updateSelectedEntityUI();
-                    this.createWorkspaceTilemap();
+                    });
                 });
             } else if (ent.type === 'lever') {
                 this.showPropertyForm("Lever Properties", [
@@ -1595,14 +1633,11 @@ export class EditorScene extends Phaser.Scene {
                     { key: 'listenChannel', label: 'Listen Channel (Optional)', type: 'text', value: String(props.listenChannel || "") },
                     { key: 'glowColor', label: 'Glow Color (hex, e.g. 0xff5500, or leave empty)', type: 'text', value: String(props.glowColor || "") }
                 ], (values) => {
-                    ent.properties = {
+                    this.applyProperties(ent, {
                         channel: values.channel.trim() || "1",
                         listenChannel: values.listenChannel.trim() ? values.listenChannel.trim() : undefined,
                         glowColor: values.glowColor.trim() ? values.glowColor.trim() : undefined
-                    };
-                    this.sound.play('sfx_checkpoint', { volume: 0.3 });
-                    this.updateSelectedEntityUI();
-                    this.createWorkspaceTilemap();
+                    });
                 });
             } else if (ent.type === 'flying') {
                 this.showPropertyForm("Flying Entity Properties", [
@@ -1614,15 +1649,12 @@ export class EditorScene extends Phaser.Scene {
                     const parsedStyle = parseInt(values.style.trim());
                     const parsedEndX = parseInt(values.endX.trim());
                     const parsedEndY = parseInt(values.endY.trim());
-                    ent.properties = {
+                    this.applyProperties(ent, {
                         style: isNaN(parsedStyle) ? 1 : parsedStyle,
                         endX: isNaN(parsedEndX) ? 0 : parsedEndX,
                         endY: isNaN(parsedEndY) ? 0 : parsedEndY,
                         velocity: parseInt(values.velocity.trim()) || 60
-                    };
-                    this.sound.play('sfx_checkpoint', { volume: 0.3 });
-                    this.updateSelectedEntityUI();
-                    this.createWorkspaceTilemap();
+                    });
                 });
             } else if (ent.type === 'gate') {
                 this.showPropertyForm("Gate Properties", [
@@ -1631,26 +1663,20 @@ export class EditorScene extends Phaser.Scene {
                     { key: 'glowColor', label: 'Glow Color (hex, e.g. 0xff5500, or leave empty)', type: 'text', value: String(props.glowColor || "") },
                     { key: 'requireAll', label: 'Require All Triggers Active (true/false)', type: 'text', value: String(props.requireAll !== undefined ? props.requireAll : "false") }
                 ], (values) => {
-                    ent.properties = {
+                    this.applyProperties(ent, {
                         listenChannel: values.listenChannel.trim() || "1",
                         tileGid: parseInt(values.tileGid.trim()) || 355,
                         glowColor: values.glowColor.trim() ? values.glowColor.trim() : undefined,
                         requireAll: values.requireAll.trim().toLowerCase() === 'true'
-                    };
-                    this.sound.play('sfx_checkpoint', { volume: 0.3 });
-                    this.updateSelectedEntityUI();
-                    this.createWorkspaceTilemap();
+                    });
                 });
             } else if (ent.type === 'sign') {
                 this.showPropertyForm("Sign Properties", [
                     { key: 'text', label: 'Sign Text', type: 'text', value: String(props.text !== undefined ? props.text : "Hello!") }
                 ], (values) => {
-                    ent.properties = {
+                    this.applyProperties(ent, {
                         text: values.text.trim()
-                    };
-                    this.sound.play('sfx_checkpoint', { volume: 0.3 });
-                    this.updateSelectedEntityUI();
-                    this.createWorkspaceTilemap();
+                    });
                 });
             } else if (ent.type === 'movingPlatform') {
                 this.showPropertyForm("Moving Platform Properties", [
@@ -1668,7 +1694,7 @@ export class EditorScene extends Phaser.Scene {
                     const parsedEndY = parseInt(values.endY.trim());
                     const parsedTileGid = parseInt(values.tileGid.trim());
 
-                    ent.properties = {
+                    this.applyProperties(ent, {
                         endX: isNaN(parsedEndX) ? 0 : parsedEndX,
                         endY: isNaN(parsedEndY) ? 0 : parsedEndY,
                         velocity: parseInt(values.velocity.trim()) || 60,
@@ -1678,22 +1704,16 @@ export class EditorScene extends Phaser.Scene {
                         carryEntities: values.carryEntities.trim() || "true",
                         glowColor: values.glowColor.trim() || "0x44aaff",
                         requireAll: values.requireAll.trim().toLowerCase() === 'true'
-                    };
-                    this.sound.play('sfx_checkpoint', { volume: 0.3 });
-                    this.updateSelectedEntityUI();
-                    this.createWorkspaceTilemap();
+                    });
                 });
             } else if (ent.type === 'cat') {
                 this.showPropertyForm("Cat Properties", [
                     { key: 'facing', label: 'Initial Facing Direction (left/right)', type: 'text', value: String(props.facing || "right") }
                 ], (values) => {
                     const facingVal = values.facing.trim().toLowerCase();
-                    ent.properties = {
+                    this.applyProperties(ent, {
                         facing: facingVal === 'left' ? 'left' : 'right'
-                    };
-                    this.sound.play('sfx_checkpoint', { volume: 0.3 });
-                    this.updateSelectedEntityUI();
-                    this.createWorkspaceTilemap();
+                    });
                 });
             } else if (ent.type === 'levelDoor') {
                 this.showPropertyForm("Level Door Properties", [
@@ -1701,25 +1721,27 @@ export class EditorScene extends Phaser.Scene {
                     { key: 'label', label: 'Door Display Name', type: 'text', value: String(props.label !== undefined ? props.label : "LEVEL 1") }
                 ], (values) => {
                     const parsedDoorId = parseInt(values.doorId.trim());
-                    ent.properties = {
+                    this.applyProperties(ent, {
                         doorId: isNaN(parsedDoorId) ? 1 : parsedDoorId,
                         label: values.label.trim()
-                    };
-                    this.sound.play('sfx_checkpoint', { volume: 0.3 });
-                    this.updateSelectedEntityUI();
-                    this.createWorkspaceTilemap();
+                    });
                 });
             } else if (ent.type === 'ladder') {
                 this.showPropertyForm("Ladder Properties", [
                     { key: 'tileGid', label: 'Ladder Tile GID', type: 'text', value: String(props.tileGid !== undefined ? props.tileGid : "71") }
                 ], (values) => {
                     const parsedTileGid = parseInt(values.tileGid.trim());
-                    ent.properties = {
+                    this.applyProperties(ent, {
                         tileGid: isNaN(parsedTileGid) ? 71 : parsedTileGid
-                    };
-                    this.sound.play('sfx_checkpoint', { volume: 0.3 });
-                    this.updateSelectedEntityUI();
-                    this.createWorkspaceTilemap();
+                    });
+                });
+            } else if (ent.type === 'spikes') {
+                this.showPropertyForm("Spikes Properties", [
+                    { key: 'rotate180', label: 'Upside Down (true/false)', type: 'text', value: String(props.rotate180 !== undefined ? props.rotate180 : "false") }
+                ], (values) => {
+                    this.applyProperties(ent, {
+                        rotate180: values.rotate180.trim().toLowerCase() === 'true'
+                    });
                 });
             }
         }
@@ -2041,9 +2063,7 @@ export class EditorScene extends Phaser.Scene {
         this.drawGrid();
         this.drawGridResizingButtons();
         
-        this.entityVisuals.forEach(v => v.destroy());
-        this.entityVisuals.clear();
-        this.levelData.entities.forEach(ent => this.drawEntityVisual(ent));
+        this.refreshEntityVisuals();
 
         this.sound.play('sfx_checkpoint', { volume: 0.3 });
     }
@@ -2094,9 +2114,7 @@ export class EditorScene extends Phaser.Scene {
         this.drawGrid();
         this.drawGridResizingButtons();
         
-        this.entityVisuals.forEach(v => v.destroy());
-        this.entityVisuals.clear();
-        this.levelData.entities.forEach(ent => this.drawEntityVisual(ent));
+        this.refreshEntityVisuals();
 
         this.sound.play('sfx_checkpoint', { volume: 0.3 });
     }
@@ -2137,9 +2155,7 @@ export class EditorScene extends Phaser.Scene {
         this.drawGridResizingButtons();
         
         // Redraw entity visuals
-        this.entityVisuals.forEach(v => v.destroy());
-        this.entityVisuals.clear();
-        this.levelData.entities.forEach(ent => this.drawEntityVisual(ent));
+        this.refreshEntityVisuals();
 
         this.sound.play('sfx_checkpoint', { volume: 0.2 });
     }
@@ -2180,9 +2196,7 @@ export class EditorScene extends Phaser.Scene {
         this.drawGridResizingButtons();
         
         // Redraw entity visuals
-        this.entityVisuals.forEach(v => v.destroy());
-        this.entityVisuals.clear();
-        this.levelData.entities.forEach(ent => this.drawEntityVisual(ent));
+        this.refreshEntityVisuals();
 
         this.sound.play('sfx_checkpoint', { volume: 0.2 });
     }
@@ -2246,6 +2260,7 @@ export class EditorScene extends Phaser.Scene {
                     }
                 }
             }
+            this.syncSelectedEntityFromSelection();
             this.drawSelectionHighlights();
             this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.4 } as any);
             return;
@@ -2343,6 +2358,9 @@ export class EditorScene extends Phaser.Scene {
                 if (originalVisual) originalVisual.setVisible(false);
                 this.sound.play('sfx_jump', { volume: 0.1, pitch: 1.5 } as any);
             } else {
+                this.selectedEntity = null;
+                this.updateSelectedEntityUI();
+
                 const terrVal = this.levelData.layers.terrain[idx];
                 if (terrVal >= 0) {
                     this.dragTileValue = terrVal;
@@ -2496,6 +2514,7 @@ export class EditorScene extends Phaser.Scene {
                 preview.gameObject.destroy();
             }
             this.dragPreviews = [];
+            this.syncSelectedEntityFromSelection();
         } else {
             // Single dragging
             if (tileX >= 0 && tileX < w && tileY >= 0 && tileY < h) {
@@ -2588,9 +2607,7 @@ export class EditorScene extends Phaser.Scene {
         this.drawSelectionHighlights();
 
         this.createWorkspaceTilemap();
-        this.entityVisuals.forEach(v => v.destroy());
-        this.entityVisuals.clear();
-        this.levelData.entities.forEach(ent => this.drawEntityVisual(ent));
+        this.refreshEntityVisuals();
         this.updateSelectedEntityUI();
 
         this.sound.play('sfx_checkpoint', { volume: 0.2 });

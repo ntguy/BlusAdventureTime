@@ -22,6 +22,9 @@ export const LEVEL_SELECT_MAPPINGS: LevelDoorMapping[] = [
     { doorId: 7, levelKey: 'Lvl7', label: 'LEVEL 7' },
     { doorId: 8, levelKey: 'Lvl8', label: 'LEVEL 8' },
     { doorId: 9, levelKey: 'Lvl9', label: 'LEVEL 9' },
+    { doorId: 10, levelKey: 'Lvl10', label: 'LEVEL 10' },
+    { doorId: 11, levelKey: 'Lvl11', label: 'LEVEL 11' },
+    { doorId: 12, levelKey: 'Lvl12', label: 'LEVEL 12' },
 ];
 
 /** Look up the mapping for a given doorId */

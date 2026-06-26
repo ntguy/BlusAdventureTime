@@ -138,6 +138,7 @@ export interface FlyingComponent extends Component {
 
 export interface SpikesComponent extends Component {
     type: 'Spikes';
+    rotate180?: boolean;
 }
 
 export interface KeyComponent extends Component {

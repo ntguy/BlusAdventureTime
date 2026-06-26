@@ -12,11 +12,16 @@ export class SpikesSystem {
 
         for (const spikeEnt of spikes) {
             const transform = spikeEnt.getComponent<TransformComponent>('Transform')!;
+            const spikesComp = spikeEnt.getComponent<SpikesComponent>('Spikes')!;
+            const rotate180 = spikesComp.rotate180 === true;
+
             const spikeBox = {
                 x: transform.x - transform.width / 2,
-                y: transform.y + 9 - 10, // Starts 10px above the bottom of the 18px tile (y + 9 is bottom)
+                y: rotate180 
+                    ? transform.y - 9 // ceiling spikes: occupy the top 10px of the 18px tile
+                    : transform.y + 9 - 10, // floor spikes: occupy the bottom 10px
                 w: transform.width,
-                h: 10 // Height reduced from 18 to 10
+                h: 10
             };
 
             for (const playerEnt of players) {

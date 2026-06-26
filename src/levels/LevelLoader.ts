@@ -534,6 +534,10 @@ export class LevelLoader {
                 const visual = getVisual(68);
                 const sprite = scene.add.sprite(entX, entY, visual.texture, visual.frame);
                 sprite.setDepth(5);
+                const rotate180 = entData.properties?.rotate180 === true;
+                if (rotate180) {
+                    sprite.setAngle(180);
+                }
 
                 const entity = entityManager.createEntity();
                 entity.addComponent({ type: 'Transform', x: sprite.x, y: sprite.y, width: 18, height: 18 } as TransformComponent);
@@ -545,7 +549,8 @@ export class LevelLoader {
                     activeFrame: visual.activeFrame
                 } as RenderComponent);
                 entity.addComponent({
-                    type: 'Spikes'
+                    type: 'Spikes',
+                    rotate180
                 } as SpikesComponent);
 
             } else if (entData.type === 'exitDoor') {
