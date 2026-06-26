@@ -3543,16 +3543,6 @@
       "properties": {}
     },
     {
-      "type": "dogSpawn",
-      "x": 31,
-      "y": 10
-    },
-    {
-      "type": "humanSpawn",
-      "x": 31,
-      "y": 9
-    },
-    {
       "type": "checkpoint",
       "x": 33,
       "y": 7,
@@ -3840,6 +3830,16 @@
       "properties": {
         "channel": "6"
       }
+    },
+    {
+      "type": "humanSpawn",
+      "x": 8,
+      "y": 16
+    },
+    {
+      "type": "dogSpawn",
+      "x": 9,
+      "y": 12
     }
   ]
 }

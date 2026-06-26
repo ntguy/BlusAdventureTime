@@ -5,7 +5,7 @@ export class MusicManager {
     private static instance: MusicManager;
     private soundManager: Phaser.Sound.BaseSoundManager | null = null;
 
-    private activeSection: 'summer' | 'winter' | 'fall' | null = null;
+    private activeSection: 'summer' | 'winter' | 'fall' | 'factory' | null = null;
     private currentTrackKey: string | null = null;
     
     // Store reference to the currently playing sound instance
@@ -14,6 +14,7 @@ export class MusicManager {
     // Timer/timeout IDs for crossfading loops
     private loopTimeoutId: any = null;
     private activeFades: Map<Phaser.Sound.BaseSound, any> = new Map();
+    private volumeMultiplier: number = 1.0;
 
     private readonly CROSSFADE_MS = 3000;
     private readonly MAX_VOLUME = 0.06; // Quiet background music
@@ -21,7 +22,8 @@ export class MusicManager {
     private readonly MUSIC_DURATIONS: Record<string, number> = {
         mus_summer: 113658,
         mus_winter: 194377,
-        mus_fall: 145763
+        mus_fall: 145763,
+        mus_factory: 113580
     };
 
     private constructor() {}
@@ -38,8 +40,14 @@ export class MusicManager {
         this.soundManager = soundManager;
     }
 
+    public setVolumeMultiplier(multiplier: number): void {
+        this.volumeMultiplier = multiplier;
+        this.updateVolume();
+    }
+
     /** Called when entering the Main Menu */
     public onMainMenuEnter(): void {
+        this.volumeMultiplier = 1.0;
         this.stopAllMusic();
         this.activeSection = null;
         this.currentTrackKey = null;
@@ -65,20 +73,21 @@ export class MusicManager {
         this.transitionToTrack(newTrackKey);
     }
 
-    private getSectionForLevel(levelKey: string): 'summer' | 'winter' | 'fall' | null {
+    private getSectionForLevel(levelKey: string): 'summer' | 'winter' | 'fall' | 'factory' | null {
         if (['Lvl1', 'Lvl2', 'Lvl3'].includes(levelKey)) return 'summer';
         if (['Lvl4', 'Lvl5', 'Lvl6'].includes(levelKey)) return 'winter';
         if (['Lvl7', 'Lvl8', 'Lvl9'].includes(levelKey)) return 'fall';
+        if (['Lvl10', 'Lvl11', 'Lvl12'].includes(levelKey)) return 'factory';
         return null;
     }
 
     private getMaxVolumeForTrack(trackKey: string | null): number {
         if (!trackKey) return 0;
-        const base = this.MAX_VOLUME * (Settings.musicVolume / 5);
+        let base = this.MAX_VOLUME * (Settings.musicVolume / 5);
         if (trackKey === 'mus_fall') {
-            return base * 0.85; // reduced by 15%
+            base = base * 0.85; // reduced by 15%
         }
-        return base;
+        return base * this.volumeMultiplier;
     }
 
     public updateVolume(): void {

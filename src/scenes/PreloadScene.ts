@@ -147,6 +147,7 @@ export class PreloadScene extends Phaser.Scene {
         this.load.audio('mus_summer', 'assets/audio/music/summerMusic.mp3');
         this.load.audio('mus_winter', 'assets/audio/music/WinterMusic.mp3');
         this.load.audio('mus_fall', 'assets/audio/music/fallMusic.mp3');
+        this.load.audio('mus_factory', 'assets/audio/music/factoryMusic.mp3');
 
         // Load the 7 custom barks
         for (let i = 1; i <= 7; i++) {

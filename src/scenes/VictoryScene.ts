@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../constants';
 import { LevelLoader } from '../levels/LevelLoader';
+import { MusicManager } from '../audio/MusicManager';
 
 interface BarkTiming {
     beat: number;
@@ -82,6 +83,7 @@ export class VictoryScene extends Phaser.Scene {
     }
 
     create(): void {
+        MusicManager.getInstance().setVolumeMultiplier(0.3);
         this.createTime = this.time.now;
         this.selectedIndex = 0;
         this.menuVisible = false;
@@ -197,6 +199,7 @@ export class VictoryScene extends Phaser.Scene {
         // 6. Joyous jump after song ends (only Blu hops, human stays static/unanimated)
         const songEndDelay = 26 * this.beatDuration + 1500;
         this.time.delayedCall(songEndDelay, () => {
+            MusicManager.getInstance().setVolumeMultiplier(1.0);
             this.playCelebration();
         });
 
