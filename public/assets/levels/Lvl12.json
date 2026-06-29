@@ -3823,11 +3823,6 @@
       }
     },
     {
-      "type": "humanSpawn",
-      "x": 25,
-      "y": 15
-    },
-    {
       "type": "spikes",
       "x": 28,
       "y": 11,
@@ -3852,6 +3847,11 @@
       "x": 32,
       "y": 9,
       "properties": {}
+    },
+    {
+      "type": "humanSpawn",
+      "x": 8,
+      "y": 16
     }
   ]
 }
