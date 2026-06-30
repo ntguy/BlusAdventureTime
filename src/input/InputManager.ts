@@ -30,11 +30,17 @@ export class InputManager {
 
     // Track which gamepad index maps to which player index (0 = Human, 1 = Dog)
     private gamepadPlayerMap: Map<number, number> = new Map();
+    private static globalGamepadPlayerMap: Map<number, number> = new Map();
 
     constructor(scene: Phaser.Scene) {
         this.scene = scene;
         this.setupKeyboard();
         this.setupGamepadStates();
+
+        // Restore global mappings
+        for (const [gpIndex, pi] of Array.from(InputManager.globalGamepadPlayerMap.entries())) {
+            this.gamepadPlayerMap.set(gpIndex, pi);
+        }
  
         // Listen to global key events
         const kb = this.scene.input.keyboard!;
@@ -164,12 +170,22 @@ export class InputManager {
         return hasAnyActivity;
     }
 
+    private setGamepadPlayerMapping(gpIndex: number, playerIndex: number): void {
+        this.gamepadPlayerMap.set(gpIndex, playerIndex);
+        InputManager.globalGamepadPlayerMap.set(gpIndex, playerIndex);
+    }
+
+    private deleteGamepadPlayerMapping(gpIndex: number): void {
+        this.gamepadPlayerMap.delete(gpIndex);
+        InputManager.globalGamepadPlayerMap.delete(gpIndex);
+    }
+
     private preMapConnectedGamepads(): void {
         const gamepads = this.getActiveGamepads().filter(gp => gp && gp.connected);
         // Only pre-map automatically if there is exactly 1 gamepad connected
         // to avoid mapping duplicate controllers from DS4Windows/Steam Input.
         if (gamepads.length === 1) {
-            this.gamepadPlayerMap.set(gamepads[0].index, 0);
+            this.setGamepadPlayerMapping(gamepads[0].index, 0);
         }
     }
 
@@ -191,7 +207,7 @@ export class InputManager {
             const connectedIndices = new Set(gamepads.map(gp => gp.index));
             for (const gpIndex of Array.from(this.gamepadPlayerMap.keys())) {
                 if (!connectedIndices.has(gpIndex)) {
-                    this.gamepadPlayerMap.delete(gpIndex);
+                    this.deleteGamepadPlayerMapping(gpIndex);
                 }
             }
 
@@ -201,14 +217,14 @@ export class InputManager {
                     if (this.hasGamepadActivity(gamepad)) {
                         const assignedPlayers = Array.from(this.gamepadPlayerMap.values());
                         if (!assignedPlayers.includes(0)) {
-                            this.gamepadPlayerMap.set(gamepad.index, 0); // Bind to Player 1 (Human)
+                            this.setGamepadPlayerMapping(gamepad.index, 0); // Bind to Player 1 (Human)
                         } else if (!assignedPlayers.includes(1)) {
                             // Avoid duplicate binding if this gamepad matches Player 1's gamepad
                             const p1Gamepad = this.getGamepadForPlayer(0);
                             if (p1Gamepad && InputManager.areGamepadsDuplicate(gamepad, p1Gamepad)) {
                                 return;
                             }
-                            this.gamepadPlayerMap.set(gamepad.index, 1); // Bind to Player 2 (Dog)
+                            this.setGamepadPlayerMapping(gamepad.index, 1); // Bind to Player 2 (Dog)
                         }
                     }
                 }
@@ -297,7 +313,7 @@ export class InputManager {
         if (this.gamepadPlayerMap.size === 0 && gamepads.length === 1) {
             const fallbackGp = gamepads[0];
             if (playerIndex === 0) {
-                this.gamepadPlayerMap.set(fallbackGp.index, 0);
+                this.setGamepadPlayerMapping(fallbackGp.index, 0);
                 return fallbackGp;
             }
         }

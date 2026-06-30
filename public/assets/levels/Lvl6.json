@@ -1990,15 +1990,15 @@
       "properties": {}
     },
     {
-      "type": "humanSpawn",
-      "x": 23,
-      "y": 11,
+      "type": "dogSpawn",
+      "x": 17,
+      "y": 17,
       "properties": {}
     },
     {
-      "type": "dogSpawn",
-      "x": 22,
-      "y": 11,
+      "type": "humanSpawn",
+      "x": 4,
+      "y": 17,
       "properties": {}
     }
   ]
